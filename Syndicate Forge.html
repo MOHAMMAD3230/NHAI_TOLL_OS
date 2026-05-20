@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<link rel="icon" href="https://mohammad3230.github.io/PROJECT/favicon.png" type="image/png" sizes="32x32" />
+<script async src="https://www.googletagmanager.com/gtag/js?id=GT-NC6T5LRJ"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'GT-NC6T5LRJ');
+</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SYNDICATE FORGE - v6.0</title>
+<style>
+    :root {
+        --bg: #0a0508; --panel: #1a1015; --accent: #ff0044; --success: #2ed573;
+        --danger: #ff4757; --warning: #ffa502; --border: #3a1a2a; --neon: #ff0044;
+    }
+
+    body {
+        background-color: var(--bg); color: #ccc; font-family: 'Courier New', monospace;
+        margin: 0; height: 100vh; display: flex; flex-direction: column;
+    }
+
+    .top-bar {
+        background: #000; padding: 12px 20px; border-bottom: 2px solid var(--accent);
+        display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;
+    }
+
+    .top-bar h1 { margin: 0; font-size: 0.9rem; color: var(--accent); letter-spacing: 1px; text-shadow: 0 0 10px rgba(255,0,68,0.5); }
+    .top-bar .time { color: var(--warning); font-size: 0.8rem; }
+
+    .main-layout {
+        display: grid; grid-template-columns: 1fr 1fr; gap: 15px; padding: 15px;
+        flex-grow: 1; min-height: 0; 
+    }
+
+    .panel {
+        background: var(--panel); border: 1px solid var(--border); border-radius: 4px;
+        padding: 15px; display: flex; flex-direction: column; 
+        overflow-y: auto;
+    }
+
+    .panel-title {
+        color: var(--accent); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px;
+        margin-bottom: 15px; border-bottom: 1px solid var(--border); padding-bottom: 8px; flex-shrink: 0;
+    }
+
+    .form-group { margin-bottom: 15px; }
+    .form-group label { display: block; font-size: 0.7rem; color: #888; margin-bottom: 6px; text-transform: uppercase; }
+    .form-group input {
+        width: 100%; background: #000; border: 1px solid var(--border); color: var(--warning);
+        padding: 12px; box-sizing: border-box; font-family: monospace; font-size: 1rem; outline: none;
+    }
+    .form-group input:focus { border-color: var(--accent); box-shadow: 0 0 10px rgba(255,0,68,0.2); }
+
+    .system-alert {
+        color: #555; font-size: 0.75rem; margin-bottom: 15px; border-left: 3px solid var(--accent); padding-left: 10px;
+        flex-shrink: 0;
+    }
+
+    .forge-btn {
+        width: 100%; padding: 12px; background: linear-gradient(145deg, #ff0044, #99002a);
+        border: 2px solid #000; color: #fff; font-weight: bold; text-transform: uppercase;
+        font-size: 0.9rem; cursor: pointer; font-family: monospace; letter-spacing: 2px;
+        box-shadow: 0 4px 0 #330011; transition: all 0.1s; margin-top: auto; flex-shrink: 0;
+    }
+    .forge-btn:active { transform: translateY(3px); box-shadow: 0 1px 0 #330011; }
+
+    .active-forge-list { flex-grow: 1; overflow-y: auto; margin-top: 10px; padding-right: 5px; min-height: 0; }
+    
+    .forge-item {
+        background: #000; border: 1px solid var(--border); padding: 12px; margin-bottom: 8px;
+        display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.8rem;
+    }
+    .forge-tag { color: var(--accent); font-weight: bold; }
+    .clean-tag { color: var(--success); font-weight: bold; }
+
+    .active-forge-list::-webkit-scrollbar { width: 6px; }
+    .active-forge-list::-webkit-scrollbar-track { background: #000; border: 1px solid var(--border); }
+    .active-forge-list::-webkit-scrollbar-thumb { background: var(--accent); border: 1px solid #000; }
+
+    @media (max-width: 1024px) {
+        .main-layout { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 600px) {
+        .top-bar h1 { font-size: 0.7rem; }
+        .forge-item { grid-template-columns: 1fr; }
+        .forge-item div:nth-child(2), .forge-item div:nth-child(4) { 
+            border-top: 1px dashed var(--border); padding-top: 6px; margin-top: 4px; 
+        }
+    }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+    <h1>▸ SYNDICATE_FORGE // DOCUMENT_ALTERATION_v6.0</h1>
+    <div class="time" id="clock">00:00:00</div>
+</div>
+
+<div class="main-layout">
+    <div class="panel">
+        <div class="panel-title">■ Identity Fabrication</div>
+        
+        <div class="system-alert">
+            SYSTEM ALERT: Input the target's real APB plate, then assign a clean alias. The system will inject this into the Enforcement Database.
+        </div>
+
+        <div class="form-group">
+            <label>Target Real Plate (APB/WANTED)</label>
+            <input type="text" id="inp-real-plate" placeholder="e.g. CR-8800" maxlength="20">
+        </div>
+        <div class="form-group">
+            <label>Fake Alias Plate (Clean Cover)</label>
+            <input type="text" id="inp-fake-plate" placeholder="e.g. TX-1234" maxlength="20">
+        </div>
+        <div class="form-group">
+            <label>Fake Driver License ID</label>
+            <input type="text" id="inp-fake-id" placeholder="e.g. DL-FAKE-9981" maxlength="30">
+        </div>
+
+        <button class="forge-btn" onclick="forgeIdentity()">INJECT INTO NETWORK</button>
+    </div>
+
+    <div class="panel">
+        <div class="panel-title">■ Active Forged Aliases</div>
+        <div class="active-forge-list" id="forge-list">
+            <div style="color:#555; text-align:center; padding:20px;">NO FORGED IDENTITIES ACTIVE</div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const ALLOWED_INPUT_REGEX = /^[A-Z0-9\-]+$/; // Security: Only uppercase letters, numbers, and hyphens
+
+    let sharedData = { 
+        revenue: 0, valids: 0, missed: 0, level: 1, rankPoints: 0, 
+        history: [], registry: {}, forgedAliases: {}, nextSpawnOverride: null,
+        activeInmates: [], releasedInmates: [], inbox: [], sentMail: [], call911Logs: [],
+        ledgerCashouts: [], intelFlags: [], paroleRecords: [], iaViolations: [], rehabPrograms: []
+    };
+
+    function updateClock() { document.getElementById('clock').innerText = new Date().toLocaleTimeString('en-GB'); }
+    setInterval(updateClock, 1000);
+
+    // --- SECURITY: Upgraded Hash to Web Crypto API (SHA-256) ---
+    const HASH_SALT = "ENFORCE_V23_SECURE_SALT_SALT";
+    async function generateSignature(dataStr) {
+        const encoder = new TextEncoder();
+        const keyData = encoder.encode(HASH_SALT);
+        const messageData = encoder.encode(dataStr);
+
+        const cryptoKey = await crypto.subtle.importKey(
+            "raw", keyData, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+        );
+
+        const signatureBuffer = await crypto.subtle.sign("HMAC", cryptoKey, messageData);
+        const signatureArray = Array.from(new Uint8Array(signatureBuffer));
+        return signatureArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    async function loadData() {
+        const savedData = localStorage.getItem('enforcementTerminalV23');
+        const savedSig = localStorage.getItem('enforcementTerminalV23_sig');
+        if (savedData) {
+            try {
+                // Verify data integrity securely
+                const computedSig = await generateSignature(savedData);
+                if (savedSig !== computedSig) {
+                    console.error("SECURITY BREACH: Data tampering detected! Wiping corrupted data.");
+                    localStorage.removeItem('enforcementTerminalV23');
+                    localStorage.removeItem('enforcementTerminalV23_sig');
+                    return;
+                }
+                const parsed = JSON.parse(savedData);
+                sharedData = parsed;
+                
+                // Compatibility checks for full sync
+                if(!sharedData.registry) sharedData.registry = {};
+                if(!sharedData.forgedAliases) sharedData.forgedAliases = {};
+                if(sharedData.nextSpawnOverride === undefined) sharedData.nextSpawnOverride = null;
+                if(!sharedData.activeInmates) sharedData.activeInmates = [];
+                if(!sharedData.releasedInmates) sharedData.releasedInmates = [];
+                if(!sharedData.inbox) sharedData.inbox = [];
+                if(!sharedData.sentMail) sharedData.sentMail = [];
+                if(!sharedData.call911Logs) sharedData.call911Logs = [];
+                if(!sharedData.ledgerCashouts) sharedData.ledgerCashouts = [];
+                if(!sharedData.intelFlags) sharedData.intelFlags = [];
+                if(!sharedData.paroleRecords) sharedData.paroleRecords = [];
+                if(!sharedData.iaViolations) sharedData.iaViolations = [];
+                if(!sharedData.rehabPrograms) sharedData.rehabPrograms = [];
+                if(!sharedData.history) sharedData.history = [];
+            } catch(e) {
+                console.error("Corrupted save data, resetting."); 
+                localStorage.removeItem('enforcementTerminalV23');
+                localStorage.removeItem('enforcementTerminalV23_sig');
+            }
+        }
+        renderForgeList();
+    }
+
+    async function saveData() {
+        const dataStr = JSON.stringify(sharedData);
+        localStorage.setItem('enforcementTerminalV23', dataStr);
+        const sig = await generateSignature(dataStr);
+        localStorage.setItem('enforcementTerminalV23_sig', sig);
+    }
+
+    async function forgeIdentity() {
+        const realPlateRaw = document.getElementById('inp-real-plate').value.toUpperCase().trim();
+        const fakePlateRaw = document.getElementById('inp-fake-plate').value.toUpperCase().trim();
+        const fakeIdRaw = document.getElementById('inp-fake-id').value.toUpperCase().trim();
+
+        // Security: Input Validation
+        if (!realPlateRaw || !fakePlateRaw || !fakeIdRaw) {
+            alert("ERROR: All fields are required for forgery.");
+            return;
+        }
+        if (!ALLOWED_INPUT_REGEX.test(realPlateRaw) || !ALLOWED_INPUT_REGEX.test(fakePlateRaw) || !ALLOWED_INPUT_REGEX.test(fakeIdRaw)) {
+            alert("SECURITY ERROR: Invalid characters. Only letters, numbers, and hyphens allowed.");
+            return;
+        }
+
+        const d5Score = 70 + Math.floor(Math.random() * 31); 
+
+        // 1. Add the FAKE plate to the official Registry as CLEAR (Dashboard 4 & 5)
+        sharedData.registry[fakePlateRaw] = {
+            id: fakeIdRaw,
+            vClass: "LVM_CLASS_1",
+            status: "CLEAR",
+            registeredBy: "SYNDICATE_FORGE",
+            d5Status: "APPROVED", 
+            d5Score: d5Score
+        };
+
+        // 2. Save the mapping in the underworld database
+        sharedData.forgedAliases[fakePlateRaw] = {
+            realPlate: realPlateRaw,
+            fakeId: fakeIdRaw,
+            timeActivated: new Date().toLocaleTimeString('en-GB')
+        };
+
+        await saveData();
+        renderForgeList();
+
+        // Clear inputs
+        document.getElementById('inp-real-plate').value = '';
+        document.getElementById('inp-fake-plate').value = '';
+        document.getElementById('inp-fake-id').value = '';
+    }
+
+    async function burnIdentity(fakePlate) {
+        // Security: Verify the key actually exists before deleting
+        if (!sharedData.forgedAliases[fakePlate]) return;
+        
+        // Remove the fake plate from the official registry
+        if (sharedData.registry[fakePlate]) delete sharedData.registry[fakePlate];
+        // Remove from forged aliases
+        delete sharedData.forgedAliases[fakePlate];
+        
+        await saveData();
+        renderForgeList();
+    }
+
+    function renderForgeList() {
+        const listContainer = document.getElementById('forge-list');
+        listContainer.innerHTML = ''; // Safe to clear
+
+        const aliases = sharedData.forgedAliases || {};
+        const keys = Object.keys(aliases);
+
+        if (keys.length === 0) {
+            listContainer.innerHTML = '<div style="color:#555; text-align:center; padding:20px;">NO FORGED IDENTITIES ACTIVE</div>';
+            return;
+        }
+
+        keys.forEach(fakePlate => {
+            const record = aliases[fakePlate];
+            const item = document.createElement('div');
+            item.className = 'forge-item';
+            
+            // Security: textContent prevents XSS injection from malicious plate names
+            const div1 = document.createElement('div');
+            div1.innerHTML = `REAL PLATE:<br>`;
+            const realSpan = document.createElement('span');
+            realSpan.className = 'forge-tag';
+            realSpan.textContent = record.realPlate; 
+            div1.appendChild(realSpan);
+
+            const div2 = document.createElement('div');
+            div2.innerHTML = `FAKE ALIAS:<br>`;
+            const fakeSpan = document.createElement('span');
+            fakeSpan.className = 'clean-tag';
+            fakeSpan.textContent = fakePlate; 
+            div2.appendChild(fakeSpan);
+
+            const div3 = document.createElement('div');
+            div3.innerHTML = `FAKE ID:<br>`;
+            const idTextNode = document.createTextNode(record.fakeId);
+            div3.appendChild(idTextNode);
+
+            const div4 = document.createElement('div');
+            div4.style.cssText = 'display:flex; align-items:center; justify-content:space-between;';
+            
+            const timeDiv = document.createElement('div');
+            timeDiv.style.cssText = 'font-size:0.7rem; color:#555;';
+            timeDiv.textContent = record.timeActivated;
+            
+            const burnBtn = document.createElement('button');
+            burnBtn.className = 'forge-btn';
+            burnBtn.style.cssText = 'padding:4px 8px; font-size:0.6rem; margin:0; width:auto;';
+            burnBtn.textContent = 'BURN';
+            // Security: addEventListener prevents XSS injection that was possible in inline onclick
+            burnBtn.addEventListener('click', () => burnIdentity(fakePlate));
+
+            div4.appendChild(timeDiv);
+            div4.appendChild(burnBtn);
+
+            item.appendChild(div1);
+            item.appendChild(div2);
+            item.appendChild(div3);
+            item.appendChild(div4);
+            
+            listContainer.appendChild(item);
+        });
+    }
+
+    // Initial load
+    loadData();
+    
+    // Sync loop - only pulling from localStorage to cross-tab sync, 
+    // but won't destroy runtime state unnecessarily 
+    setInterval(() => {
+        loadData();
+    }, 2000);
+</script>
+</body>
+</html>
