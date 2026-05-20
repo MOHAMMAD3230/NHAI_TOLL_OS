@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<link rel="icon" href="https://mohammad3230.github.io/PROJECT/favicon.png" type="image/png" sizes="32x32" />
+<script async src="https://www.googletagmanager.com/gtag/js?id=GT-NC6T5LRJ"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'GT-NC6T5LRJ');
+</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NHAI - Prison & Detention Terminal</title>
+<style>
+    :root {
+        --bg: #0a0508; --panel: #101018; --accent: #ff0044; --success: #2ed573;
+        --danger: #ff4757; --warning: #ffa502; --border: #2a1a2a;
+        --police: #00d9ff; --ems: #ff4757; --fire: #ffa502;
+    }
+
+    body {
+        background-color: var(--bg); color: #ccc; font-family: 'Courier New', monospace;
+        margin: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+    }
+
+    .top-bar {
+        background: #000; padding: 15px 20px; border-bottom: 2px solid var(--accent);
+        display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;
+    }
+
+    .top-bar h1 { margin: 0; font-size: 1rem; color: var(--accent); letter-spacing: 1px; text-shadow: 0 0 10px rgba(255,0,68,0.5); }
+    .top-bar .time { color: var(--warning); font-size: 0.9rem; }
+    .top-bar .sync-indicator { font-size: 0.65rem; color: #2ed573; letter-spacing: 1px; }
+
+    .main-layout {
+        display: grid; grid-template-columns: 1fr 1.5fr; gap: 20px; padding: 20px;
+        flex-grow: 1; min-height: 0; overflow: hidden;
+    }
+
+    .panel {
+        background: var(--panel); border: 1px solid var(--border); border-radius: 4px;
+        padding: 20px; display: flex; flex-direction: column; overflow: hidden;
+    }
+
+    .panel-title {
+        color: var(--accent); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px;
+        margin-bottom: 15px; border-bottom: 1px solid var(--border); padding-bottom: 10px; flex-shrink: 0;
+    }
+
+    .stat-row {
+        display: flex; gap: 15px; margin-bottom: 20px; flex-shrink: 0;
+    }
+
+    .stat-box {
+        flex: 1; background: #000; border: 1px solid var(--border); padding: 15px; border-radius: 4px; text-align: center;
+    }
+    .stat-num { font-size: 2rem; font-weight: 900; margin-bottom: 5px; }
+    .stat-label { font-size: 0.75rem; color: #888; text-transform: uppercase; }
+
+    .inmate-list { flex-grow: 1; overflow-y: auto; padding-right: 5px; }
+    .inmate-item {
+        background: #000; border: 1px solid var(--border); padding: 15px; margin-bottom: 10px;
+        border-left: 4px solid var(--danger); border-radius: 4px;
+        display: flex; justify-content: space-between; align-items: center; gap: 15px;
+    }
+    .inmate-item.served { border-left-color: var(--success); box-shadow: inset 0 0 15px rgba(46, 213, 115, 0.1); }
+    .inmate-item.released { border-left-color: #555; opacity: 0.5; }
+    .inmate-item.federal { border-left-color: var(--ems); box-shadow: inset 0 0 10px rgba(255,71,87,0.15); }
+    .inmate-item.federal.served { border-left-color: var(--success); box-shadow: inset 0 0 15px rgba(46, 213, 115, 0.1); }
+
+    .plate-tag { color: var(--warning); font-weight: bold; font-size: 1.1rem; }
+    .meta-tag { color: #555; font-size: 0.75rem; margin-top: 4px; }
+
+    .offense-badge {
+        display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 0.65rem;
+        font-weight: bold; text-transform: uppercase; margin-top: 6px;
+    }
+    .offense-rogue { background: rgba(255,165,2,0.15); color: var(--warning); border: 1px solid var(--warning); }
+    .offense-forgery { background: rgba(255,0,68,0.15); color: var(--accent); border: 1px solid var(--accent); }
+    .offense-911 { background: rgba(255,71,87,0.2); color: var(--ems); border: 1px solid var(--ems); }
+    .offense-default { background: rgba(255,255,255,0.05); color: #888; border: 1px solid #555; }
+
+    .mech-btn {
+        padding: 10px 15px; border: 2px solid #000; cursor: pointer; font-weight: bold;
+        text-transform: uppercase; font-size: 0.7rem; box-shadow: 0 3px 0 #000;
+        transition: all 0.1s; font-family: monospace; border-radius: 4px; flex-shrink: 0;
+    }
+    .mech-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 #000; }
+    .mech-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+    .btn-release { background: linear-gradient(145deg, #2ed573, #1e9e55); color: #fff; }
+    .btn-release:disabled { background: #555; }
+
+    .inmate-list::-webkit-scrollbar { width: 6px; }
+    .inmate-list::-webkit-scrollbar-track { background: #000; border: 1px solid var(--border); }
+    .inmate-list::-webkit-scrollbar-thumb { background: var(--accent); border: 1px solid #000; }
+
+    .cell-block { 
+        display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 15px; flex-shrink: 0;
+    }
+    .cell { 
+        background: #000; border: 1px solid var(--border); height: 60px; border-radius: 4px;
+        display: flex; align-items: center; justify-content: center; font-size: 0.7rem; color: #333; text-align:center; padding:5px;
+        flex-direction: column; gap: 3px;
+    }
+    .cell.occupied { border-color: var(--danger); color: var(--danger); box-shadow: inset 0 0 10px rgba(255,0,68,0.2); }
+    .cell.served { border-color: var(--success); color: var(--success); box-shadow: inset 0 0 10px rgba(46,213,115,0.2); }
+    .cell.federal { border-color: var(--ems); color: var(--ems); box-shadow: inset 0 0 10px rgba(255,71,87,0.15); }
+    .cell.federal.served { border-color: var(--success); color: var(--success); box-shadow: inset 0 0 10px rgba(46,213,115,0.2); }
+    .cell-day { font-size: 0.55rem; color: #555; }
+
+    .sentence-bar {
+        width: 100%; height: 4px; background: #333; border-radius: 2px; margin-top: 8px; overflow: hidden;
+    }
+    .sentence-fill { height: 100%; border-radius: 2px; transition: width 1s linear; }
+    .sentence-fill.active { background: var(--warning); }
+    .sentence-fill.complete { background: var(--success); }
+
+    .facility-tag {
+        font-size: 0.65rem; padding: 2px 6px; border-radius: 2px; margin-top: 4px; display: inline-block;
+    }
+    .facility-central { background: rgba(255,165,2,0.1); color: var(--warning); }
+    .facility-max { background: rgba(255,0,68,0.1); color: var(--accent); }
+    .facility-federal { background: rgba(255,71,87,0.15); color: var(--ems); border: 1px solid var(--ems); }
+
+    .arrival-toast {
+        position: fixed; bottom: 20px; right: 20px; background: #1a0a0a; border: 2px solid var(--accent);
+        padding: 15px 20px; border-radius: 4px; z-index: 100; display: none;
+        animation: toastSlideIn 0.3s ease-out; box-shadow: 0 5px 30px rgba(255,0,68,0.3);
+    }
+    .arrival-toast.active { display: block; }
+    .arrival-toast .toast-title { color: var(--accent); font-weight: bold; font-size: 0.8rem; margin-bottom: 5px; }
+    .arrival-toast .toast-plate { color: var(--warning); font-size: 1.2rem; font-weight: 900; }
+    .arrival-toast .toast-offense { color: #888; font-size: 0.7rem; margin-top: 5px; }
+    @keyframes toastSlideIn {
+        from { transform: translateX(100px); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+    }
+
+    @media (max-width: 1024px) {
+        .main-layout { grid-template-columns: 1fr; overflow-y: auto; }
+        .cell-block { grid-template-columns: repeat(3, 1fr); }
+    }
+    @media (max-width: 600px) {
+        .top-bar h1 { font-size: 0.7rem; }
+        .main-layout { padding: 10px; }
+        .inmate-item { flex-direction: column; align-items: flex-start; }
+        .cell-block { grid-template-columns: repeat(2, 1fr); }
+    }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+    <h1>▸ NHAI_PRISON // DETENTION_TERMINAL_v8.1</h1>
+    <div class="sync-indicator" id="syncStatus">● SYNC: ACTIVE</div>
+    <div class="time" id="clock">00:00:00</div>
+</div>
+
+<div class="main-layout">
+    <div class="panel">
+        <div class="panel-title">■ Central Detention Block</div>
+        
+        <div class="stat-row">
+            <div class="stat-box">
+                <div class="stat-num" style="color:var(--danger);" id="stat-active">0</div>
+                <div class="stat-label">Active Inmates</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-num" style="color:var(--success);" id="stat-released">0</div>
+                <div class="stat-label">Discharged</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-num" style="color:var(--warning);" id="stat-parole">0</div>
+                <div class="stat-label">Parole Ready</div>
+            </div>
+        </div>
+
+        <div style="color: #555; font-size: 0.75rem; margin-bottom: 10px;">
+            Holding Cells (Max 12)
+        </div>
+        <div class="cell-block" id="cellGrid"></div>
+
+        <div style="color: #555; font-size: 0.75rem; margin-top: auto; border-top: 1px solid var(--border); padding-top: 15px;">
+            SYSTEM NOTE: Inmates serve sentences in real-time (1 sec = 1 day). Federal holds require 120 days.<br>
+            Network sync: D1 ↔ D2 ↔ D7 active. Safe merge enabled.
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="panel-title">■ Active Inmate Roster</div>
+        <div class="inmate-list" id="inmate-list">
+            <div style="color:#555; text-align:center; padding:40px;">NO INMATES IN CUSTODY</div>
+        </div>
+    </div>
+</div>
+
+<div class="arrival-toast" id="arrivalToast">
+    <div class="toast-title">⚠ NEW INTAKE RECEIVED</div>
+    <div class="toast-plate" id="toastPlate">---</div>
+    <div class="toast-offense" id="toastOffense">---</div>
+</div>
+
+<script>
+    const LS_MASTER_KEY = 'enforcementTerminalV23_D1'; // Universal Sync Key
+
+    let sharedData = { 
+        revenue: 0, valids: 0, missed: 0, level: 1, rankPoints: 0, 
+        history: [], registry: {}, forgedAliases: {}, nextSpawnOverride: null,
+        activeInmates: [], releasedInmates: [], inbox: [], sentMail: [], call911Logs: [],
+        ledgerCashouts: [], intelFlags: [], paroleRecords: [], iaViolations: [], rehabPrograms: [],
+        _lastModified: 0 // Timestamp for safe sync
+    };
+
+    let knownInmatePlates = new Set();
+    let audioCtx = null;
+
+    // Initialize Audio on first click (Browser autoplay policy requirement)
+    document.addEventListener('click', () => {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    }, { once: true });
+
+    function updateClock() { document.getElementById('clock').textContent = new Date().toLocaleTimeString('en-GB'); }
+    setInterval(updateClock, 1000);
+
+    function repairInmateData(inmate) {
+        if (!inmate) return inmate;
+        if (inmate.sentenceDays === undefined || inmate.sentenceDays === null) {
+            if (inmate.offense === "911 FELONY" || inmate.facility === "FEDERAL HOLD") inmate.sentenceDays = 120;
+            else if (inmate.offense === "FORGERY & FUGITIVE" || inmate.facility === "MAXIMUM SECURITY") inmate.sentenceDays = 90;
+            else inmate.sentenceDays = 60;
+        }
+        if (inmate.sentenceRemaining === undefined || inmate.sentenceRemaining === null) inmate.sentenceRemaining = inmate.sentenceDays;
+        inmate.sentenceRemaining = Math.max(0, inmate.sentenceRemaining);
+        inmate.sentenceDays = Math.max(1, inmate.sentenceDays);
+        if (!inmate.offense) inmate.offense = "WARRANT / ROGUE";
+        if (!inmate.facility) inmate.facility = "CENTRAL DETENTION";
+        if (!inmate.realPlate) inmate.realPlate = inmate.plate || "UNKNOWN";
+        if (!inmate.id) inmate.id = "MISSING";
+        if (!inmate.dateArrested) inmate.dateArrested = new Date().toLocaleDateString();
+        if (!inmate.status) inmate.status = "ARRESTED";
+        return inmate;
+    }
+
+    // Deep Merge with Safe Array Handling to prevent data loss
+    function deepMerge(target, source) {
+        for (const key in source) {
+            if (key === '_lastModified') continue; // Skip sync timestamp
+            
+            // Special primary-key merge for Inmates to prevent dropping tabs' data
+            if (key === 'activeInmates' && target[key] instanceof Array && source[key] instanceof Array) {
+                const sourceInmatesMap = new Map(source[key].map(i => [i.plate, i]));
+                const targetInmatesMap = new Map(target[key].map(i => [i.plate, i]));
+                
+                for (const [plate, srcInmate] of sourceInmatesMap.entries()) {
+                    if (targetInmatesMap.has(plate)) {
+                        // Merge inmate properties
+                        Object.assign(targetInmatesMap.get(plate), srcInmate);
+                    } else {
+                        // New inmate from other tab
+                        targetInmatesMap.set(plate, srcInmate);
+                    }
+                }
+                target[key] = Array.from(targetInmatesMap.values());
+            } 
+            // Standard arrays get replaced wholesale (history/logs are append-only and safe)
+            else if (source[key] instanceof Array) {
+                target[key] = source[key];
+            } 
+            // Objects merge recursively (like registry)
+            else if (source[key] instanceof Object && target[key] instanceof Object) {
+                deepMerge(target[key], source[key]);
+            } 
+            // Primitives overwrite
+            else {
+                target[key] = source[key];
+            }
+        }
+        return target;
+    }
+
+    function loadData() {
+        try {
+            const savedStr = localStorage.getItem(LS_MASTER_KEY);
+            if (savedStr) {
+                const parsed = JSON.parse(savedStr);
+                
+                // Conflict Resolution: Only apply external changes if they are newer
+                if (parsed._lastModified > sharedData._lastModified) {
+                    const previousPlates = new Set((sharedData.activeInmates || []).map(i => i.plate));
+                    
+                    deepMerge(sharedData, parsed);
+                    
+                    // Ensure arrays exist
+                    sharedData.history = sharedData.history || [];
+                    sharedData.activeInmates = sharedData.activeInmates || [];
+                    sharedData.releasedInmates = sharedData.releasedInmates || [];
+                    sharedData.rehabPrograms = sharedData.rehabPrograms || [];
+                    sharedData.paroleRecords = sharedData.paroleRecords || [];
+                    sharedData.iaViolations = sharedData.iaViolations || [];
+                    
+                    let needsSave = false;
+                    sharedData.activeInmates.forEach((inmate, i) => {
+                        const before = JSON.stringify(inmate);
+                        sharedData.activeInmates[i] = repairInmateData(inmate);
+                        if (JSON.stringify(sharedData.activeInmates[i]) !== before) needsSave = true;
+                    });
+                    
+                    // Detect new arrivals from other tabs
+                    sharedData.activeInmates.forEach(inmate => {
+                        if (!previousPlates.has(inmate.plate) && !knownInmatePlates.has(inmate.plate)) {
+                            showArrivalToast(inmate);
+                        }
+                        knownInmatePlates.add(inmate.plate);
+                    });
+                    
+                    // Safely clean up known plates for released inmates
+                    const currentPlates = new Set(sharedData.activeInmates.map(i => i.plate));
+                    const platesToRemove = [];
+                    knownInmatePlates.forEach(plate => {
+                        if (!currentPlates.has(plate)) platesToRemove.push(plate);
+                    });
+                    platesToRemove.forEach(plate => knownInmatePlates.delete(plate));
+                    
+                    if (needsSave) saveData(true);
+                }
+            }
+        } catch(e) {
+            console.error("Prison load error:", e);
+        }
+        renderDashboard();
+    }
+
+    function saveData(skipTimestampUpdate = false) {
+        try {
+            if (!skipTimestampUpdate) {
+                sharedData._lastModified = Date.now();
+            }
+            localStorage.setItem(LS_MASTER_KEY, JSON.stringify(sharedData));
+        } catch(e) {
+            console.error("Prison save error:", e);
+        }
+    }
+
+    let toastTimeout = null;
+    function showArrivalToast(inmate) {
+        const toast = document.getElementById('arrivalToast');
+        document.getElementById('toastPlate').textContent = inmate.plate;
+        document.getElementById('toastOffense').textContent = `${inmate.offense || 'UNKNOWN'} — ${inmate.facility || 'CENTRAL DETENTION'}`;
+        toast.classList.add('active');
+        playAlertSound();
+        if (toastTimeout) clearTimeout(toastTimeout);
+        toastTimeout = setTimeout(() => { toast.classList.remove('active'); }, 4000);
+    }
+
+    function playAlertSound() {
+        if (!audioCtx) return;
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        const t = audioCtx.currentTime;
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(300, t);
+        osc.frequency.setValueAtTime(450, t + 0.15);
+        osc.frequency.setValueAtTime(300, t + 0.3);
+        gain.gain.setValueAtTime(0.2, t);
+        gain.gain.exponentialRampToValueAtTime(0.01, t + 0.4);
+        osc.start(t);
+        osc.stop(t + 0.4);
+    }
+
+    function playReleaseSound() {
+        if (!audioCtx) return;
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        const t = audioCtx.currentTime;
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(600, t);
+        osc.frequency.setValueAtTime(800, t + 0.1);
+        osc.frequency.setValueAtTime(1000, t + 0.2);
+        gain.gain.setValueAtTime(0.15, t);
+        gain.gain.exponentialRampToValueAtTime(0.01, t + 0.3);
+        osc.start(t);
+        osc.stop(t + 0.3);
+    }
+
+    function releaseInmate(index) {
+        if (index < 0 || index >= sharedData.activeInmates.length) return;
+        
+        let inmate = sharedData.activeInmates.splice(index, 1)[0];
+        inmate.dateReleased = new Date().toLocaleDateString();
+        inmate.status = "RELEASED";
+        
+        sharedData.releasedInmates.push(inmate);
+        sharedData.history.push({ plate: inmate.plate, id: inmate.id, action: "PAROLE / RELEASED", timestamp: new Date().toLocaleTimeString() });
+        if (!sharedData.paroleRecords) sharedData.paroleRecords = [];
+        sharedData.paroleRecords.push({ plate: inmate.plate, id: inmate.id, releaseDate: inmate.dateReleased });
+        
+        if (sharedData.registry[inmate.plate]) {
+            sharedData.registry[inmate.plate].status = "CLEAR";
+            sharedData.registry[inmate.plate].registeredBy = "NHAI_PAROLE_BOARD";
+        }
+        
+        knownInmatePlates.delete(inmate.plate);
+        playReleaseSound();
+        saveData();
+        renderDashboard();
+    }
+
+    function getOffenseBadgeClass(offense) {
+        if (!offense) return 'offense-default';
+        if (offense.includes('911') || offense.includes('FELONY')) return 'offense-911';
+        if (offense.includes('FORGERY')) return 'offense-forgery';
+        if (offense.includes('ROGUE') || offense.includes('WARRANT')) return 'offense-rogue';
+        return 'offense-default';
+    }
+
+    function getFacilityTagClass(facility) {
+        if (!facility) return 'facility-central';
+        if (facility.includes('FEDERAL')) return 'facility-federal';
+        if (facility.includes('MAXIMUM')) return 'facility-max';
+        return 'facility-central';
+    }
+
+    function isFederalInmate(inmate) {
+        return inmate.facility === "FEDERAL HOLD" || (inmate.offense && inmate.offense.includes('911'));
+    }
+
+    function renderDashboard() {
+        const activeCount = sharedData.activeInmates.length;
+        const releasedCount = (sharedData.releasedInmates || []).length;
+        const paroleCount = sharedData.activeInmates.filter(i => i.sentenceRemaining <= 0).length;
+
+        document.getElementById('stat-active').textContent = activeCount;
+        document.getElementById('stat-released').textContent = releasedCount;
+        document.getElementById('stat-parole').textContent = paroleCount;
+
+        const syncEl = document.getElementById('syncStatus');
+        syncEl.textContent = activeCount > 0 ? `● SYNC: ${activeCount} INMATES TRACKED` : '● SYNC: ACTIVE';
+        syncEl.style.color = activeCount > 0 ? 'var(--warning)' : '#2ed573';
+
+        const cellGrid = document.getElementById('cellGrid');
+        cellGrid.innerHTML = '';
+        for (let i = 0; i < 12; i++) {
+            const cell = document.createElement('div');
+            if (i < activeCount) {
+                const inmate = sharedData.activeInmates[i];
+                const isServed = inmate.sentenceRemaining <= 0;
+                const isFed = isFederalInmate(inmate);
+                let cellClass = 'cell';
+                if (isFed && !isServed) cellClass += ' federal';
+                else if (isServed) cellClass += ' served';
+                else cellClass += ' occupied';
+                cell.className = cellClass;
+                const remaining = inmate.sentenceRemaining || 0;
+                
+                const plateSpan = document.createElement('span');
+                plateSpan.textContent = inmate.plate;
+                
+                const daySpan = document.createElement('span');
+                daySpan.className = 'cell-day';
+                daySpan.textContent = isServed ? 'DONE' : remaining + 'd left';
+                
+                cell.appendChild(plateSpan);
+                cell.appendChild(daySpan);
+            } else {
+                cell.className = 'cell';
+                cell.textContent = 'EMPTY';
+            }
+            cellGrid.appendChild(cell);
+        }
+
+        const listContainer = document.getElementById('inmate-list');
+        listContainer.innerHTML = '';
+
+        if (activeCount === 0 && releasedCount === 0) {
+            listContainer.innerHTML = '<div style="color:#555; text-align:center; padding:40px;">NO INMATES IN CUSTODY</div>';
+            return;
+        }
+
+        const sortedInmates = [...sharedData.activeInmates].sort((a, b) => {
+            const aFed = isFederalInmate(a) ? 0 : 1;
+            const bFed = isFederalInmate(b) ? 0 : 1;
+            if (aFed !== bFed) return aFed - bFed;
+            return (a.sentenceRemaining || 0) - (b.sentenceRemaining || 0);
+        });
+
+        sortedInmates.forEach((inmate) => {
+            const originalIndex = sharedData.activeInmates.indexOf(inmate);
+            const isServed = inmate.sentenceRemaining <= 0;
+            const isFed = isFederalInmate(inmate);
+            
+            let itemClass = 'inmate-item';
+            if (isFed && !isServed) itemClass += ' federal';
+            if (isServed) itemClass += isFed ? ' federal served' : ' served';
+            
+            const totalSentence = inmate.sentenceDays || 60;
+            const timeServed = totalSentence - (inmate.sentenceRemaining || 0);
+            const percentServed = Math.min(100, Math.max(0, (timeServed / totalSentence) * 100));
+
+            const offenseBadge = document.createElement('span');
+            offenseBadge.className = `offense-badge ${getOffenseBadgeClass(inmate.offense)}`;
+            offenseBadge.textContent = inmate.offense || 'UNKNOWN';
+
+            const facilityTag = document.createElement('span');
+            facilityTag.className = `facility-tag ${getFacilityTagClass(inmate.facility)}`;
+            facilityTag.textContent = inmate.facility || 'CENTRAL DETENTION';
+
+            const item = document.createElement('div');
+            item.className = itemClass;
+
+            // Left Column
+            const infoDiv = document.createElement('div');
+            infoDiv.style.flex = '1';
+
+            const plateDiv = document.createElement('div');
+            plateDiv.className = 'plate-tag';
+            plateDiv.textContent = inmate.plate;
+
+            const metaDiv = document.createElement('div');
+            metaDiv.className = 'meta-tag';
+            metaDiv.textContent = `Real Plate: ${inmate.realPlate || inmate.plate || 'N/A'} | ID: ${inmate.id || 'MISSING'}`;
+
+            const badgeDiv = document.createElement('div');
+            badgeDiv.style.marginTop = '6px';
+            badgeDiv.appendChild(offenseBadge);
+            badgeDiv.appendChild(document.createTextNode(' '));
+            badgeDiv.appendChild(facilityTag);
+
+            const statusDiv = document.createElement('div');
+            statusDiv.className = 'meta-tag';
+            statusDiv.style.marginTop = '6px';
+            statusDiv.style.color = isServed ? 'var(--success)' : '#888';
+            statusDiv.textContent = isServed ? '✔ SENTENCE SERVED — ELIGIBLE FOR RELEASE' : `Time Remaining: ${inmate.sentenceRemaining} / ${totalSentence} Days`;
+
+            const sentenceBar = document.createElement('div');
+            sentenceBar.className = 'sentence-bar';
+            const sentenceFill = document.createElement('div');
+            sentenceFill.className = `sentence-fill ${isServed ? 'complete' : 'active'}`;
+            sentenceFill.style.width = `${percentServed}%`;
+            sentenceBar.appendChild(sentenceFill);
+
+            infoDiv.appendChild(plateDiv);
+            infoDiv.appendChild(metaDiv);
+            infoDiv.appendChild(badgeDiv);
+            infoDiv.appendChild(statusDiv);
+            infoDiv.appendChild(sentenceBar);
+
+            // Right Column
+            const releaseBtn = document.createElement('button');
+            releaseBtn.className = 'mech-btn btn-release';
+            releaseBtn.textContent = isServed ? 'RELEASE' : 'LOCKED';
+            if (!isServed) releaseBtn.disabled = true;
+            releaseBtn.addEventListener('click', () => releaseInmate(originalIndex));
+
+            item.appendChild(infoDiv);
+            item.appendChild(releaseBtn);
+            listContainer.appendChild(item);
+        });
+
+        (sharedData.releasedInmates || []).slice(-3).reverse().forEach(inmate => {
+            const item = document.createElement('div');
+            item.className = 'inmate-item released';
+
+            const infoDiv = document.createElement('div');
+            
+            const plateDiv = document.createElement('div');
+            plateDiv.className = 'plate-tag';
+            plateDiv.style.color = '#555';
+            plateDiv.textContent = `${inmate.plate} (SERVED)`;
+
+            const metaDiv = document.createElement('div');
+            metaDiv.className = 'meta-tag';
+            metaDiv.textContent = `Offense: ${inmate.offense || 'N/A'} | Released: ${inmate.dateReleased || 'N/A'}`;
+
+            infoDiv.appendChild(plateDiv);
+            infoDiv.appendChild(metaDiv);
+
+            const statusDiv = document.createElement('div');
+            statusDiv.style.color = 'var(--success)';
+            statusDiv.style.fontSize = '0.7rem';
+            statusDiv.textContent = 'DISCHARGED';
+
+            item.appendChild(infoDiv);
+            item.appendChild(statusDiv);
+            listContainer.appendChild(item);
+        });
+    }
+
+    // Main time-tick loop
+    setInterval(() => {
+        let needsRender = false;
+        let needsSave = false;
+        
+        sharedData.activeInmates.forEach(inmate => {
+            if (inmate.sentenceRemaining === undefined || inmate.sentenceRemaining === null) {
+                inmate.sentenceRemaining = inmate.sentenceDays || 60;
+            }
+            if (inmate.sentenceRemaining > 0) {
+                inmate.sentenceRemaining--;
+                needsRender = true;
+                needsSave = true;
+            }
+        });
+
+        if (needsRender) renderDashboard();
+        if (needsSave) saveData(); // Updates timestamp and saves
+    }, 1000);
+
+    // Sync loop
+    setInterval(() => { loadData(); }, 2000);
+
+    // Initialize
+    loadData();
+    sharedData.activeInmates.forEach(inmate => knownInmatePlates.add(inmate.plate));
+</script>
+</body>
+</html>
