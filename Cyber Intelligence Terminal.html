@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<link rel="icon" href="https://mohammad3230.github.io/PROJECT/favicon.png" type="image/png" sizes="32x32" />
+<script async src="https://www.googletagmanager.com/gtag/js?id=GT-NC6T5LRJ"></script>
+<script>
+window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','GT-NC6T5LRJ');
+</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NHAI - Cyber Intelligence Terminal</title>
+<style>
+:root{--bg:#050510;--panel:#0a0a1a;--accent:#a855f7;--success:#2ed573;--danger:#ff0044;--warning:#ffa502;--border:#2a1a3a;}
+body{background:var(--bg);color:#ccc;font-family:'Courier New',monospace;margin:0;height:100vh;display:flex;flex-direction:column;overflow:hidden;}
+.top-bar{background:#000;padding:15px 20px;border-bottom:2px solid var(--accent);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;}
+.top-bar h1{margin:0;font-size:.9rem;color:var(--accent);letter-spacing:1px;text-shadow:0 0 10px rgba(168,85,247,.5);}
+.top-bar .time{color:var(--warning);font-size:.8rem;}
+.main-layout{display:grid;grid-template-columns:1fr 1fr;gap:20px;padding:20px;flex-grow:1;min-height:0;overflow:hidden;}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:20px;display:flex;flex-direction:column;overflow:hidden;}
+.panel-title{color:var(--accent);font-size:.85rem;text-transform:uppercase;letter-spacing:1px;margin-bottom:15px;border-bottom:1px solid var(--border);padding-bottom:10px;flex-shrink:0;}
+.stat-row{display:flex;gap:12px;margin-bottom:20px;flex-shrink:0;}
+.stat-box{flex:1;background:#000;border:1px solid var(--border);padding:15px;border-radius:4px;text-align:center;border-top:3px solid var(--accent);}
+.stat-num{font-size:2rem;font-weight:900;margin-bottom:5px;}
+.stat-label{font-size:.7rem;color:#888;text-transform:uppercase;}
+.alert-list{flex-grow:1;overflow-y:auto;padding-right:5px;min-height:0;}
+.alert-item{background:#000;border:1px solid var(--border);padding:12px;margin-bottom:8px;border-left:4px solid var(--danger);border-radius:4px;font-size:.8rem;}
+.alert-item.low{border-left-color:var(--warning);}
+.alert-item.resolved{border-left-color:var(--success);opacity:.5;}
+.mech-btn{width:100%;padding:12px;border:2px solid #000;cursor:pointer;font-weight:bold;text-transform:uppercase;font-size:.8rem;box-shadow:0 3px 0 #000;transition:all .1s;font-family:monospace;border-radius:4px;margin-top:10px;flex-shrink:0;}
+.mech-btn:active{transform:translateY(2px);box-shadow:0 1px 0 #000;}
+.btn-scan{background:linear-gradient(145deg,#a855f7,#7c3aed);color:#fff;}
+.btn-purge{background:var(--danger);color:#fff;}
+.log-box{flex:1;background:#000;border:1px solid #222;padding:10px;font-size:.7rem;color:var(--accent);overflow-y:auto;border-radius:4px;min-height:0;}
+.alert-list::-webkit-scrollbar,.log-box::-webkit-scrollbar{width:6px;}
+.alert-list::-webkit-scrollbar-track,.log-box::-webkit-scrollbar-track{background:#000;border:1px solid var(--border);}
+.alert-list::-webkit-scrollbar-thumb,.log-box::-webkit-scrollbar-thumb{background:var(--accent);border:1px solid #000;}
+@media(max-width:1024px){.main-layout{grid-template-columns:1fr;overflow-y:auto;}}
+@media(max-width:600px){.top-bar h1{font-size:.7rem;}.stat-row{flex-direction:column;}}
+</style>
+</head>
+<body>
+<div class="top-bar">
+<h1>▸ NHAI_CYBERINT // INTELLIGENCE_TERMINAL_v10.0</h1>
+<div class="time" id="clock">00:00:00</div>
+</div>
+<div class="main-layout">
+<div class="panel">
+<div class="panel-title">■ Forge Detection Matrix</div>
+<div class="stat-row">
+<div class="stat-box"><div class="stat-num" style="color:var(--danger)" id="stat-forges">0</div><div class="stat-label">Active Forges</div></div>
+<div class="stat-box"><div class="stat-num" style="color:var(--warning)" id="stat-tollpass">0</div><div class="stat-label">Toll Bypasses</div></div>
+<div class="stat-box"><div class="stat-num" style="color:var(--success)" id="stat-flagged">0</div><div class="stat-label">Flagged</div></div>
+</div>
+<div class="alert-list" id="alert-list"><div style="color:#555;text-align:center;padding:20px;">NO INTELLIGENCE DATA</div></div>
+<button class="mech-btn btn-scan" onclick="runDeepScan()">DEEP NETWORK SCAN</button>
+<button class="mech-btn btn-purge" onclick="purgeForgedEntries()">PURGE FORGED ENTRIES</button>
+</div>
+<div class="panel">
+<div class="panel-title">■ Intelligence Log</div>
+<div class="log-box" id="intel-log"></div>
+</div>
+</div>
+<script>
+let sharedData = { 
+    revenue: 0, valids: 0, missed: 0, level: 1, rankPoints: 0, 
+    history: [], registry: {}, forgedAliases: {}, nextSpawnOverride: null,
+    activeInmates: [], releasedInmates: [], inbox: [], sentMail: [], call911Logs: [],
+    ledgerCashouts: [], intelFlags: [], paroleRecords: [], iaViolations: [], rehabPrograms: []
+};
+
+// Sync flag to prevent race conditions
+let isDirty = false;
+
+function updateClock(){document.getElementById('clock').innerText=new Date().toLocaleTimeString('en-GB');}
+setInterval(updateClock,1000);
+
+// Upgraded Security: 53-bit Integer Hash + XOR
+const HASH_SALT = "ENFORCE_V23_SECURE_SALT_X9F2";
+function generateSignature(dataStr) {
+    let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+    const salted = HASH_SALT + dataStr;
+    for (let i = 0; i < salted.length; i++) {
+        const ch = salted.charCodeAt(i);
+        h1 = Math.imul(h1 ^ ch, 2654435761);
+        h2 = Math.imul(h2 ^ ch, 1597334677);
+    }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16);
+}
+
+// Security: XSS Sanitizer
+function sanitize(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
+function loadData(){
+    const savedData = localStorage.getItem('enforcementTerminalV23');
+    const savedSig = localStorage.getItem('enforcementTerminalV23_sig');
+    if(savedData){
+        try{
+            if(savedSig !== generateSignature(savedData)){
+                console.error("CYBERINT BREACH: Data tampering detected! Wiping corrupted data.");
+                localStorage.removeItem('enforcementTerminalV23');
+                localStorage.removeItem('enforcementTerminalV23_sig');
+                return;
+            }
+            
+            const p = JSON.parse(savedData);
+            
+            // Sync Check: Prevent overwriting recent local actions
+            if(isDirty) {
+                isDirty = false;
+            } else {
+                sharedData = p;
+            }
+
+            // Migration / Fallbacks
+            if(!sharedData.registry)sharedData.registry={};
+            if(!sharedData.forgedAliases)sharedData.forgedAliases={};
+            if(sharedData.nextSpawnOverride===undefined)sharedData.nextSpawnOverride=null;
+            if(!sharedData.activeInmates)sharedData.activeInmates=[];
+            if(!sharedData.releasedInmates)sharedData.releasedInmates=[];
+            if(!sharedData.inbox)sharedData.inbox=[];
+            if(!sharedData.sentMail)sharedData.sentMail=[];
+            if(!sharedData.call911Logs)sharedData.call911Logs=[];
+            if(!sharedData.ledgerCashouts)sharedData.ledgerCashouts=[];
+            if(!sharedData.intelFlags)sharedData.intelFlags=[];
+            if(!sharedData.paroleRecords)sharedData.paroleRecords=[];
+            if(!sharedData.iaViolations)sharedData.iaViolations=[];
+            if(!sharedData.rehabPrograms)sharedData.rehabPrograms=[];
+            if(!sharedData.history)sharedData.history=[];
+            
+        }catch(e){
+            console.error("Load error:", e);
+        }
+    }
+    renderDashboard();
+    renderLogs();
+}
+
+function saveData(){
+    const dataStr = JSON.stringify(sharedData);
+    localStorage.setItem('enforcementTerminalV23', dataStr);
+    localStorage.setItem('enforcementTerminalV23_sig', generateSignature(dataStr));
+    isDirty = true; // Mark as recently saved to prevent next loadData sync from overwriting
+}
+
+function addLog(msg, color){
+    const l=document.getElementById('intel-log');
+    const e=document.createElement('div');
+    e.style.color=color||'var(--accent)';
+    e.style.marginBottom='5px';
+    e.textContent='> '+msg; // Security: textContent prevents XSS
+    l.prepend(e);
+
+    if(!sharedData.intelFlags) sharedData.intelFlags = [];
+    sharedData.intelFlags.push({
+        plate: "SYSTEM",
+        type: "LOG",
+        message: msg,
+        color: color,
+        time: new Date().toLocaleTimeString(),
+        status: "LOGGED"
+    });
+    // Note: Save is called by the action functions to avoid I/O spam
+}
+
+function renderLogs(){
+    const l=document.getElementById('intel-log');
+    l.innerHTML = '';
+    const logs = (sharedData.intelFlags||[]).filter(f => f.type === 'LOG').slice(-30).reverse();
+    if(logs.length === 0){
+        l.innerHTML = '<div style="color:#555;">No intelligence logs recorded yet.</div>';
+    } else {
+        logs.forEach(log => {
+            const e=document.createElement('div');
+            e.style.color=log.color||'var(--accent)';
+            e.style.marginBottom='5px';
+            e.textContent='> '+log.message;
+            l.appendChild(e);
+        });
+    }
+}
+
+function runDeepScan(){
+    loadData(); // Sync before modifying
+    addLog('Initiating deep network scan...','#888');
+    let forgeCount=0;
+    let tollBypass=0;
+    let flagged=0;
+    const alerts=[];
+
+    Object.keys(sharedData.registry).forEach(plate=>{
+        if(sharedData.registry[plate].registeredBy==='SYNDICATE_FORGE'){
+            forgeCount++;
+            const alias=sharedData.forgedAliases[plate];
+            const alertObj={
+                plate:plate,
+                realPlate:alias?alias.realPlate:'UNKNOWN',
+                fakeId:alias?alias.fakeId:'N/A',
+                type:'FORGE_INJECTION',
+                time:new Date().toLocaleTimeString(),
+                status:'ACTIVE'
+            };
+            alerts.push(alertObj);
+            
+            const exists=sharedData.intelFlags.find(f=>f.plate===plate&&f.status==='ACTIVE'&&f.type==='FORGE_INJECTION');
+            if(!exists){
+                sharedData.intelFlags.push(alertObj);
+                flagged++;
+            }
+        }
+    });
+
+    (sharedData.history||[]).forEach(h=>{
+        if(h.action&&h.action.includes('TOLL')&&h.plate!=='UNKNOWN'){
+            const reg=sharedData.registry[h.plate];
+            if(reg&&reg.registeredBy==='SYNDICATE_FORGE'){
+                tollBypass++;
+            }
+        }
+    });
+
+    addLog(`Scan complete: ${forgeCount} forges, ${tollBypass} toll bypasses, ${flagged} newly flagged.`,'var(--accent)');
+    saveData();
+    renderDashboard();
+}
+
+function purgeForgedEntries(){
+    loadData(); // Sync before modifying
+    let purged=0;
+    const purgedPlates = [];
+
+    Object.keys(sharedData.registry).forEach(plate=>{
+        if(sharedData.registry[plate].registeredBy==='SYNDICATE_FORGE'){
+            delete sharedData.registry[plate];
+            delete sharedData.forgedAliases[plate];
+            purgedPlates.push(plate);
+            purged++;
+        }
+    });
+
+    // Update history so Audit terminal doesn't count forged revenue
+    (sharedData.history||[]).forEach(h => {
+        if(purgedPlates.includes(h.plate)){
+            h.action = "PURGED BY CYBERINT";
+        }
+    });
+
+    sharedData.intelFlags.forEach(f=>{if(f.type==='FORGE_INJECTION')f.status='PURGED';});
+    
+    addLog(`PURGED: ${purged} forged entries removed from network.`,'var(--danger)');
+    saveData();
+    renderDashboard();
+}
+
+function renderAlerts(){
+    const list=document.getElementById('alert-list');
+    list.innerHTML='';
+    const activeFlags = (sharedData.intelFlags||[]).filter(f => f.type === 'FORGE_INJECTION');
+
+    if(activeFlags.length === 0){
+        list.innerHTML='<div style="color:#555;text-align:center;padding:20px;">NO THREATS DETECTED</div>';
+        return;
+    }
+
+    activeFlags.forEach(a => {
+        const d=document.createElement('div');
+        d.className = a.status === 'PURGED' ? 'alert-item resolved' : 'alert-item';
+        
+        const topRow = document.createElement('div');
+        topRow.style.cssText = 'display:flex;justify-content:space-between';
+        
+        const plateSpan = document.createElement('span');
+        plateSpan.style.cssText = 'color:var(--danger);font-weight:bold';
+        plateSpan.textContent = a.plate; // XSS Safe
+        
+        const timeSpan = document.createElement('span');
+        timeSpan.style.color = '#555';
+        timeSpan.textContent = a.time; // XSS Safe
+        
+        topRow.appendChild(plateSpan);
+        topRow.appendChild(timeSpan);
+        
+        const botRow = document.createElement('div');
+        botRow.style.cssText = 'font-size:.7rem;color:var(--warning);margin-top:4px';
+        botRow.textContent = `Real Plate: ${sanitize(a.realPlate)} | Fake ID: ${sanitize(a.fakeId)} | Status: ${a.status}`; // XSS Safe
+        
+        d.appendChild(topRow);
+        d.appendChild(botRow);
+        list.appendChild(d);
+    });
+}
+
+function renderDashboard(){
+    let forgeCount = 0;
+    let bypassCount = 0;
+    
+    // Calculate Active Forges
+    Object.values(sharedData.registry||{}).forEach(r => {
+        if(r.registeredBy === 'SYNDICATE_FORGE') forgeCount++;
+    });
+    
+    // Calculate Active Bypasses (Resolved PURGED entries shouldn't count towards active toll bypass)
+    (sharedData.history||[]).forEach(h=>{
+        if(h.action && h.action.includes('TOLL') && h.plate!=='UNKNOWN'){
+            const reg=sharedData.registry[h.plate];
+            if(reg && reg.registeredBy==='SYNDICATE_FORGE') bypassCount++;
+        }
+    });
+    
+    document.getElementById('stat-forges').innerText = forgeCount;
+    document.getElementById('stat-tollpass').innerText = bypassCount;
+    document.getElementById('stat-flagged').innerText = (sharedData.intelFlags||[]).filter(f=>f.status==='ACTIVE'&&f.type==='FORGE_INJECTION').length;
+    
+    renderAlerts();
+}
+
+loadData();
+setInterval(loadData, 2000);
+</script>
+</body>
+</html>
