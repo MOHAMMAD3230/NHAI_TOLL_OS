@@ -320,7 +320,7 @@
 <div>TOLL_REVENUE: $<span id="salVal">0</span></div>
 <div>VALIDS: <span id="valCount" style="color:var(--success)">0</span></div>
 <div>MISSES: <span id="missCount" style="color:var(--danger)">0</span></div>
-<div>RANK_PTS: <span id="ptsVal" style="color:var(--warning)">0</span>/10</div>
+<div>RANK_PTS: <span id="ptsVal" style="color:var(--warning)">0</span></div>
 <div>STATION_LVL: <span id="lvlVal">1</span></div>
 <button class="mech-btn" style="padding: 5px 10px; box-shadow: none; background: var(--accent); color: #000;" onclick="toggleSecondaryLayout('dbs')">NETWORK DBs</button>
 <button class="mech-btn" id="btnMail" style="padding: 5px 10px; box-shadow: none; background: var(--warning); color: #000;" onclick="toggleSecondaryLayout('mail')">✉ MAIL <span id="mailCount" style="color:var(--danger)">0</span></button>
@@ -490,6 +490,16 @@
 </div>
 
 <script>
+  /* ===== SECURITY: SAFE DOM RENDERER ===== */
+  function safeRender(parent, html) {
+      const temp = document.createElement('div');
+      temp.innerHTML = html;
+      parent.innerHTML = ''; // Clear safely
+      while (temp.firstChild) {
+          parent.appendChild(temp.firstChild);
+      }
+  }
+
   /* ===== AUDIO ENGINE ===== */
   const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   function playSound(type) {
@@ -523,7 +533,7 @@
   }
   function stopSirenSound() {
       if(!sirenInterval)return; clearInterval(sirenInterval); sirenInterval=null;
-      if(sirenOsc){sirenGain.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+0.1);sirenOsc.stop(audioCtx.currentTime+0.1);sirenOsc=null;sirenGain=null;}
+      if(sirenOsc){ try { sirenGain.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+0.1); sirenOsc.stop(audioCtx.currentTime+0.1); } catch(e){} sirenOsc=null;sirenGain=null;}
   }
 
   let emergencyAlarmInterval=null;
@@ -534,11 +544,12 @@
   let car=null, revenue=0, valids=0, missed=0, level=1, rankPoints=0, wantedPlates=[], isResetting=false, isScanning=false;
   let history = [];
 
-  /* ===== SYNC KEYS - matched to Toll/Dispatch terminals ===== */
+  /* ===== SYNC KEYS ===== */
   const LS_D1_KEY = 'enforcementTerminalV23_D1';
   const LS_D2_KEY = 'enforcementTerminalV23_TOLL';
+  const MAX_HISTORY_SIZE = 200; // Memory overflow protection
   
-  let sharedData = {
+  const defaultSharedData = {
       revenue: 0, valids: 0, missed: 0, level: 1, rankPoints: 0, history: [],
       registry: {}, forgedAliases: {}, nextSpawnOverride: null,
       activeInmates: [], releasedInmates: [],
@@ -547,39 +558,50 @@
       iaViolations: [], rehabPrograms: []
   };
 
-  /* ===== SAFE DATA MERGE ===== */
+  let sharedData = JSON.parse(JSON.stringify(defaultSharedData));
+
+  /* ===== SAFE DATA MERGE & SYNC ===== */
   function loadData() {
       try {
-          const d1 = localStorage.getItem(LS_D1_KEY);
-          const d2 = localStorage.getItem(LS_D2_KEY);
-          sharedData = { registry: {}, history: [], call911Logs: [], inbox: [], sentMail: [], activeInmates: [], releasedInmates: [] };
+          let d1 = null, d2 = null;
+          try { const raw = localStorage.getItem(LS_D1_KEY); if(raw) d1 = JSON.parse(raw); } catch(e) { localStorage.removeItem(LS_D1_KEY); }
+          try { const raw = localStorage.getItem(LS_D2_KEY); if(raw) d2 = JSON.parse(raw); } catch(e) { localStorage.removeItem(LS_D2_KEY); }
+
+          // Reset sharedData to defaults before merging
+          sharedData = JSON.parse(JSON.stringify(defaultSharedData));
           
-          if (d1) { 
-              const parsed = JSON.parse(d1); 
-              Object.assign(sharedData, parsed); 
-              if(parsed.registry) Object.assign(sharedData.registry, parsed.registry);
+          // Merge D1 first (local state)
+          if (d1 && typeof d1 === 'object') { 
+              Object.keys(defaultSharedData).forEach(key => {
+                  if(d1[key] !== undefined && d1[key] !== null) {
+                      if(typeof d1[key] === 'object' && !Array.isArray(d1[key])) {
+                          sharedData[key] = sharedData[key] || {};
+                          Object.assign(sharedData[key], d1[key]);
+                      } else {
+                          sharedData[key] = d1[key];
+                      }
+                  }
+              });
           }
-          if (d2) { 
-              const parsed = JSON.parse(d2); 
-              Object.assign(sharedData, parsed); 
-              if(parsed.registry) Object.assign(sharedData.registry, parsed.registry);
-              if(parsed.history) sharedData.history = parsed.history.concat(sharedData.history).filter((v, i, a) => a.findIndex(t => (t.plate === v.plate && t.timestamp === v.timestamp)) === i);
+
+          // Merge D2 safely (remote updates) — registry keys overlay, history concatenates
+          if (d2 && typeof d2 === 'object') { 
+              if(d2.registry && typeof d2.registry === 'object') Object.assign(sharedData.registry, d2.registry);
+              if(d2.forgedAliases && typeof d2.forgedAliases === 'object') Object.assign(sharedData.forgedAliases, d2.forgedAliases);
+              if(d2.history && Array.isArray(d2.history)) {
+                  sharedData.history = d2.history.concat(sharedData.history);
+                  sharedData.history = sharedData.history.filter((v, i, a) => a.findIndex(t => (t.plate === v.plate && t.timestamp === v.timestamp)) === i);
+                  sharedData.history = sharedData.history.slice(0, MAX_HISTORY_SIZE); // Prevent infinite array growth
+              }
+              if(d2.nextSpawnOverride) sharedData.nextSpawnOverride = d2.nextSpawnOverride;
+              if(d2.activeInmates && Array.isArray(d2.activeInmates)) sharedData.activeInmates = d2.activeInmates;
+              if(d2.releasedInmates && Array.isArray(d2.releasedInmates)) sharedData.releasedInmates = d2.releasedInmates;
+              if(d2.call911Logs && Array.isArray(d2.call911Logs)) sharedData.call911Logs = d2.call911Logs;
+              if(d2.inbox && Array.isArray(d2.inbox)) sharedData.inbox = d2.inbox;
+              if(d2.sentMail && Array.isArray(d2.sentMail)) sharedData.sentMail = d2.sentMail;
           }
           
-          if(!sharedData.registry) sharedData.registry = {};
-          if(!sharedData.forgedAliases) sharedData.forgedAliases = {};
-          if(sharedData.nextSpawnOverride === undefined) sharedData.nextSpawnOverride = null;
-          if(!sharedData.activeInmates) sharedData.activeInmates = [];
-          if(!sharedData.releasedInmates) sharedData.releasedInmates = [];
-          if(!sharedData.inbox) sharedData.inbox = [];
-          if(!sharedData.sentMail) sharedData.sentMail = [];
-          if(!sharedData.call911Logs) sharedData.call911Logs = [];
-          if(!sharedData.ledgerCashouts) sharedData.ledgerCashouts = [];
-          if(!sharedData.intelFlags) sharedData.intelFlags = [];
-          if(!sharedData.paroleRecords) sharedData.paroleRecords = [];
-          if(!sharedData.iaViolations) sharedData.iaViolations = [];
-          if(!sharedData.rehabPrograms) sharedData.rehabPrograms = [];
-          
+          // Pull top-level stats from shared state
           revenue = sharedData.revenue || 0;
           valids = sharedData.valids || 0;
           missed = sharedData.missed || 0;
@@ -590,318 +612,977 @@
           checkEmergencyDispatch();
       } catch (e) { 
           console.error("Corrupted save data, resetting.", e); 
+          sharedData = JSON.parse(JSON.stringify(defaultSharedData));
       }
       updateStatusUI(); updateMailUI();
   }
 
   function saveData() {
       try {
+          // Sync local state back into sharedData before persisting
           sharedData.revenue = revenue;
           sharedData.valids = valids;
           sharedData.missed = missed;
           sharedData.level = level;
           sharedData.rankPoints = rankPoints;
           sharedData.history = history;
+
           const dataStr = JSON.stringify(sharedData);
           localStorage.setItem(LS_D1_KEY, dataStr);
-          localStorage.setItem(LS_D2_KEY, dataStr);
+          localStorage.setItem(LS_D2_KEY, dataStr); // Push to Toll network
       } catch(e) { console.error("Save failed", e); }
   }
 
   /* ===== PERIODIC NETWORK SYNC ===== */
   let lastTollPendingState = false;
   setInterval(() => {
-      loadData();
       try {
-          const tollReg = sharedData.registry || {};
-          const hasPending = Object.values(tollReg).some(r => r.status === 'PENDING_ENFORCEMENT' && r.source === 'D17_RELICENSE');
-          if (hasPending && !lastTollPendingState) {
-              addLog("⚠ NHAI TOLL: ENFORCEMENT CHECK REQUEST RECEIVED", "var(--warning)");
-              playSound('buzzer');
-              receiveMail("NHAI_TOLL_ENFORCEMENT", "ID VERIFICATION REQUEST", "A vehicle at the Toll Gate requires ID Verification and clearance.\nPlease inspect documents and run a database scan.");
-              if(!car && !isResetting) {
-                  addLog("AUTO-ROUTING: Vehicle approaching gate...", "var(--accent)");
-                  setTimeout(() => spawnVehicle(), 1500);
+          const rawD2 = localStorage.getItem(LS_D2_KEY);
+          if(!rawD2) return;
+          const d2 = JSON.parse(rawD2);
+
+          // Check for D17 specific enforcement requests
+          if (d2.registry) {
+              const hasPending = Object.values(d2.registry).some(r => r.status === 'PENDING_ENFORCEMENT' && r.source === 'D17_RELICENSE');
+              if (hasPending && !lastTollPendingState) {
+                  loadData(); // Do a full safe reload
+                  addLog("⚠ NHAI TOLL: ENFORCEMENT CHECK REQUEST RECEIVED", "var(--warning)");
+                  playSound('buzzer');
+                  receiveMail("NHAI_TOLL_ENFORCEMENT", "ID VERIFICATION REQUEST", "A vehicle at the Toll Gate requires ID Verification and clearance.\nPlease inspect documents and run a database scan.");
+                  
+                  if(!car && !isResetting) {
+                      addLog("AUTO-ROUTING: Vehicle approaching gate...", "var(--accent)");
+                      setTimeout(() => spawnVehicle(), 1500);
+                  }
               }
+              lastTollPendingState = hasPending;
           }
-          lastTollPendingState = hasPending;
       } catch(e) {}
+
   }, 2000);
 
   /* ===== EMERGENCY DISPATCH CHECK ===== */
   let emergencyActive = false;
   function checkEmergencyDispatch(){
-      const override = sharedData.nextSpawnOverride;
-      if(override && !override.startsWith("HOLD-") && sharedData.registry[override]){
-          const reg = sharedData.registry[override];
-          if(reg.registeredBy === "911_OPERATOR" || reg.source === "911_DISPATCH"){
-              if(!emergencyActive){ emergencyActive = true; document.getElementById('btnEmergency').classList.add('active'); playEmergencyAlarm(); addLog("⚠ PRIORITY 1: 911 EMERGENCY DISPATCH RECEIVED!", "var(--danger)"); }
-              return;
+      try {
+          const override = sharedData.nextSpawnOverride;
+          if(override && !override.startsWith("HOLD-") && sharedData.registry[override]){
+              const reg = sharedData.registry[override];
+              if(reg && (reg.registeredBy === "911_OPERATOR" || reg.source === "911_DISPATCH")){
+                  if(!emergencyActive){ emergencyActive = true; document.getElementById('btnEmergency').classList.add('active'); playEmergencyAlarm(); addLog("⚠ PRIORITY 1: 911 EMERGENCY DISPATCH RECEIVED!", "var(--danger)"); }
+                  return;
+              }
           }
-      }
-      if(emergencyActive && (!override || override.startsWith("HOLD-"))){ emergencyActive = false; document.getElementById('btnEmergency').classList.remove('active'); stopEmergencyAlarm(); }
+      } catch(e) {}
+      if(emergencyActive){ emergencyActive = false; document.getElementById('btnEmergency').classList.remove('active'); stopEmergencyAlarm(); }
   }
 
-  function get911AgencyUnits(){ const logs = sharedData.call911Logs || []; const dispatched = logs.filter(l => l.status === 'DISPATCHED'); if(dispatched.length > 0){ return dispatched[dispatched.length - 1].dispatchedUnits || ['POLICE']; } return ['POLICE']; }
+  function get911AgencyUnits(){ 
+      try {
+          const logs = sharedData.call911Logs || []; 
+          const dispatched = logs.filter(l => l.status === 'DISPATCHED'); 
+          if(dispatched.length > 0){ return dispatched[dispatched.length - 1].dispatchedUnits || ['POLICE']; } 
+      } catch(e) {}
+      return ['POLICE']; 
+  }
   function acceptEmergencyDispatch(){ if(!emergencyActive) return; stopEmergencyAlarm(); playSound('gate'); const agencies = get911AgencyUnits(); addLog(`OFFICER ACKNOWLEDGED. ${agencies.join(' + ')} pulling to gate NOW.`, "var(--warning)"); spawnVehicle(); }
   
   /* ===== LOGGING ===== */
-  function addLog(msg, color) { const log = document.getElementById('log'); const entry = document.createElement('div'); entry.style.color = color || "#0f0"; entry.style.marginBottom = "5px"; entry.innerText = `> ${msg}`; log.prepend(entry); }
+  function addLog(msg, color) { const log = document.getElementById('log'); const entry = document.createElement('div'); entry.style.color = color || "#0f0"; entry.style.marginBottom = "5px"; entry.textContent = `> ${msg}`; log.prepend(entry); }
   
   /* ===== MAIL SYSTEM ===== */
   function receiveMail(from, subject, body) {
       if(!sharedData.inbox) sharedData.inbox = [];
       sharedData.inbox.push({ from, to: "ENFORCEMENT_D1", cc: "", subject, body, timestamp: new Date().toLocaleString(), read: false });
-      saveData(); updateMailUI(); playSound('mail'); addLog(`✉ NEW MAIL: ${subject}`, "var(--accent)");
+      saveData(); updateMailUI();
+      playSound('mail');
+      addLog(`✉ NEW MAIL: ${subject}`, "var(--accent)");
   }
-  function updateMailUI() { const inbox = sharedData.inbox || []; const unread = inbox.filter(m => !m.read).length; document.getElementById('mailCount').innerText = unread; document.getElementById('inboxBadge').innerText = unread; }
+
+  function updateMailUI() {
+      const inbox = sharedData.inbox || [];
+      const unread = inbox.filter(m => !m.read).length;
+      document.getElementById('mailCount').textContent = unread;
+      document.getElementById('inboxBadge').textContent = unread;
+  }
+
   let currentMailTab = 'inbox';
-  function switchMailTab(tab, el) { currentMailTab = tab; document.querySelectorAll('.mail-nav-item').forEach(n => n.classList.remove('active')); if(el) el.classList.add('active'); renderMailList(tab); }
+  function switchMailTab(tab, el) {
+      currentMailTab = tab;
+      document.querySelectorAll('.mail-nav-item').forEach(n => n.classList.remove('active'));
+      if(el) el.classList.add('active');
+      renderMailList(tab);
+  }
+
   function renderMailList(tab) {
-      const list = document.getElementById('mailList'); const bodyView = document.getElementById('mailBodyView'); bodyView.classList.remove('active'); bodyView.innerHTML = '<div style="color:#555; text-align:center; margin-top:50px;">Select a mail to read</div>';
-      const mails = tab === 'inbox' ? (sharedData.inbox || []) : (sharedData.sentMail || []); list.innerHTML = '';
-      if(mails.length === 0) { list.innerHTML = '<div style="padding:30px; text-align:center; color:#555;">No messages</div>'; return; }
+      const list = document.getElementById('mailList');
+      const bodyView = document.getElementById('mailBodyView');
+      bodyView.classList.remove('active');
+      bodyView.innerHTML = '<div style="color:#555; text-align:center; margin-top:50px;">Select a mail to read</div>';
+      
+      const mails = tab === 'inbox' ? (sharedData.inbox || []) : (sharedData.sentMail || []);
+      list.innerHTML = '';
+      
+      if(mails.length === 0) {
+          list.innerHTML = '<div style="padding:30px; text-align:center; color:#555;">No messages</div>';
+          return;
+      }
+      
       mails.slice().reverse().forEach((m, idx) => {
-          const realIdx = mails.length - 1 - idx; const item = document.createElement('div');
+          const realIdx = mails.length - 1 - idx;
+          const item = document.createElement('div');
           item.className = 'mail-item' + (tab === 'inbox' && !m.read ? ' unread' : '');
-          item.innerHTML = `<div style="flex:1;"><div class="mail-from">${m.from}</div><div class="mail-subject">${m.subject}</div><div class="mail-snippet">${(m.body || '').substring(0, 60)}...</div></div><div style="font-size:0.6rem; color:#555; white-space:nowrap;">${m.timestamp || ''}</div>`;
-          item.onclick = () => openMail(tab, realIdx); list.appendChild(item);
+          
+          const from = document.createElement('div'); from.className = 'mail-from'; from.textContent = m.from;
+          const subject = document.createElement('div'); subject.className = 'mail-subject'; subject.textContent = m.subject;
+          const snippet = document.createElement('div'); snippet.className = 'mail-snippet'; snippet.textContent = (m.body || '').substring(0, 60) + '...';
+          
+          const left = document.createElement('div'); left.style.flex = '1';
+          left.appendChild(from); left.appendChild(subject); left.appendChild(snippet);
+          
+          const time = document.createElement('div'); time.style.cssText = 'font-size:0.6rem; color:#555; white-space:nowrap;'; time.textContent = m.timestamp || '';
+          
+          item.appendChild(left); item.appendChild(time);
+          item.onclick = () => openMail(tab, realIdx);
+          list.appendChild(item);
       });
   }
+
   function openMail(tab, idx) {
-      const mails = tab === 'inbox' ? (sharedData.inbox || []) : (sharedData.sentMail || []); const m = mails[idx]; if(!m) return;
-      if(tab === 'inbox' && !m.read) { m.read = true; saveData(); updateMailUI(); renderMailList(tab); }
+      const mails = tab === 'inbox' ? (sharedData.inbox || []) : (sharedData.sentMail || []);
+      const m = mails[idx];
+      if(!m) return;
+      
+      if(tab === 'inbox' && !m.read) {
+          m.read = true;
+          saveData(); updateMailUI();
+          renderMailList(tab);
+      }
+      
       const bodyView = document.getElementById('mailBodyView');
-      bodyView.innerHTML = `<div style="margin-bottom:15px; border-bottom:1px solid #333; padding-bottom:10px;"><div style="color:var(--warning); font-weight:bold;">From: ${m.from}</div><div style="color:#888; font-size:0.75rem;">To: ${m.to} ${m.cc ? '| Cc: ' + m.cc : ''}</div><div style="color:#eee; font-weight:bold; margin-top:5px;">${m.subject}</div><div style="color:#555; font-size:0.7rem;">${m.timestamp || ''}</div></div><div style="white-space:pre-wrap; color:#ccc;">${m.body}</div>`;
+      const header = document.createElement('div'); header.style.cssText = 'margin-bottom:15px; border-bottom:1px solid #333; padding-bottom:10px;';
+      header.innerHTML = `
+          <div style="color:var(--warning); font-weight:bold;">From: <span id="mFrom"></span></div>
+          <div style="color:#888; font-size:0.75rem;">To: <span id="mTo"></span> ${m.cc ? '| Cc: ' : ''} <span id="mCc"></span></div>
+          <div style="color:#eee; font-weight:bold; margin-top:5px;" id="mSub"></div>
+          <div style="color:#555; font-size:0.7rem;" id="mTime"></div>
+      `;
+      header.querySelector('#mFrom').textContent = m.from;
+      header.querySelector('#mTo').textContent = m.to;
+      if(m.cc) header.querySelector('#mCc').textContent = m.cc;
+      header.querySelector('#mSub').textContent = m.subject;
+      header.querySelector('#mTime').textContent = m.timestamp || '';
+      
+      const body = document.createElement('div'); body.style.cssText = 'white-space:pre-wrap; color:#ccc;'; body.textContent = m.body;
+      
+      bodyView.innerHTML = '';
+      bodyView.appendChild(header);
+      bodyView.appendChild(body);
       bodyView.classList.add('active');
   }
-  function openCompose() { document.getElementById('composeWindow').classList.add('active'); document.getElementById('composeTo').value = ''; document.getElementById('composeCc').value = ''; document.getElementById('composeSubject').value = ''; document.getElementById('composeBody').value = ''; }
-  function closeCompose() { document.getElementById('composeWindow').classList.remove('active'); }
+
+  function openCompose() {
+      document.getElementById('composeWindow').classList.add('active');
+      document.getElementById('composeTo').value = '';
+      document.getElementById('composeCc').value = '';
+      document.getElementById('composeSubject').value = '';
+      document.getElementById('composeBody').value = '';
+  }
+
+  function closeCompose() {
+      document.getElementById('composeWindow').classList.remove('active');
+  }
+
   function sendMail() {
-      const to = document.getElementById('composeTo').value.trim(); const cc = document.getElementById('composeCc').value.trim(); const subject = document.getElementById('composeSubject').value.trim(); const body = document.getElementById('composeBody').value.trim();
-      if(!to || !subject || !body) { addLog("MAIL ERROR: To, Subject, and Body are required.", "var(--danger)"); playSound('error'); return; }
+      const to = document.getElementById('composeTo').value.trim();
+      const cc = document.getElementById('composeCc').value.trim();
+      const subject = document.getElementById('composeSubject').value.trim();
+      const body = document.getElementById('composeBody').value.trim();
+      
+      if(!to || !subject || !body) {
+          addLog("MAIL ERROR: To, Subject, and Body are required.", "var(--danger)");
+          playSound('error');
+          return;
+      }
+      
       if(!sharedData.sentMail) sharedData.sentMail = [];
-      sharedData.sentMail.push({ from: "ENFORCEMENT_D1", to: to, cc: cc, subject: subject, body: body, timestamp: new Date().toLocaleString(), read: true });
-      saveData(); closeCompose(); playSound('success'); addLog(`✉ MAIL SENT: ${subject} → ${to}`, "var(--accent)");
+      sharedData.sentMail.push({
+          from: "ENFORCEMENT_D1",
+          to: to,
+          cc: cc,
+          subject: subject,
+          body: body,
+          timestamp: new Date().toLocaleString(),
+          read: true
+      });
+      
+      saveData();
+      closeCompose();
+      playSound('success');
+      addLog(`✉ MAIL SENT: ${subject} → ${to}`, "var(--accent)");
   }
 
   /* ===== APB WANTED LIST ===== */
   function refreshAPBList() {
-      const prefixes = ["PX","NX","TX","DV","CR","XR","ZK","AV","BN"]; wantedPlates = [];
+      const prefixes = ["PX","NX","TX","DV","CR","XR","ZK","AV","BN"];
+      wantedPlates = [];
       const count = 3 + Math.floor(Math.random() * 3);
-      for(let i = 0; i < count; i++) { wantedPlates.push(`${prefixes[Math.floor(Math.random()*prefixes.length)]}-${Math.floor(1000+Math.random()*9000)}`); }
-      const box = document.getElementById('wantedPlateBox'); box.innerHTML = '';
-      wantedPlates.forEach(plate => { const div = document.createElement('div'); div.className = 'wanted-plate-item'; div.innerText = plate; box.appendChild(div); });
+      for(let i = 0; i < count; i++) {
+          wantedPlates.push(`${prefixes[Math.floor(Math.random()*prefixes.length)]}-${Math.floor(1000+Math.random()*9000)}`);
+      }
+      const box = document.getElementById('wantedPlateBox');
+      box.innerHTML = '';
+      wantedPlates.forEach(plate => {
+          const div = document.createElement('div');
+          div.className = 'wanted-plate-item';
+          div.textContent = plate;
+          box.appendChild(div);
+      });
   }
 
   /* ===== VEHICLE SPAWN ===== */
   function spawnVehicle() {
-      if(car || isResetting) return; playSound('engine');
+      if(car || isResetting) return;
+      playSound('engine');
       if(Math.random() < 0.4 || wantedPlates.length === 0) refreshAPBList();
+
       let customSpawn = null, isForgedAlias = false, isPatrolDispatch = false, is911Emergency = false, dispatchedAgencies = [], originDashboard = "DEFAULT";
+
       if (sharedData.nextSpawnOverride) {
           customSpawn = sharedData.registry[sharedData.nextSpawnOverride];
           if(customSpawn) {
               customSpawn.plate = sharedData.nextSpawnOverride;
-              if(customSpawn.registeredBy === "911_OPERATOR" || customSpawn.source === "911_DISPATCH"){ is911Emergency = true; dispatchedAgencies = get911AgencyUnits(); originDashboard = "911"; const logs = sharedData.call911Logs || []; const dispatched = logs.filter(l => l.status === 'DISPATCHED'); if(dispatched.length > 0){ dispatched[dispatched.length-1].status = 'ARRIVED'; dispatched[dispatched.length-1].arrivedAt = new Date().toLocaleTimeString(); } }
+              if(customSpawn.registeredBy === "911_OPERATOR" || customSpawn.source === "911_DISPATCH"){
+                  is911Emergency = true;
+                  dispatchedAgencies = get911AgencyUnits();
+                  originDashboard = "911";
+                  const logs = sharedData.call911Logs || [];
+                  const dispatched = logs.filter(l => l.status === 'DISPATCHED');
+                  if(dispatched.length > 0){
+                      dispatched[dispatched.length-1].status = 'ARRIVED';
+                      dispatched[dispatched.length-1].arrivedAt = new Date().toLocaleTimeString();
+                  }
+              }
               else if (customSpawn.registeredBy === "PATROL_DISPATCH" || customSpawn.registeredBy === "NHAI_PATROL_DISPATCH") { isPatrolDispatch = true; dispatchedAgencies = ['POLICE']; originDashboard = "D16"; }
               else if (customSpawn.registeredBy === "NHAI_ARREST_STAMP" || customSpawn.registeredBy === "NHAI_REJECTION") { originDashboard = "D7"; }
               else if (customSpawn.registeredBy === "NHAI_TOLL_ENFORCEMENT" || customSpawn.registeredBy === "ENFORCEMENT_HOLD") { originDashboard = "D2"; }
           }
-          sharedData.nextSpawnOverride = null; saveData(); checkEmergencyDispatch();
+          sharedData.nextSpawnOverride = null;
+          saveData();
+          checkEmergencyDispatch();
       }
+
+      // Random chance to pull from existing registry
       if (!is911Emergency && !isPatrolDispatch && sharedData.registry && Object.keys(sharedData.registry).length > 0 && Math.random() < 0.4) {
-          const regPlates = Object.keys(sharedData.registry); const randomPlate = regPlates[Math.floor(Math.random() * regPlates.length)]; customSpawn = sharedData.registry[randomPlate]; customSpawn.plate = randomPlate;
-          if(sharedData.forgedAliases && sharedData.forgedAliases[randomPlate]) { isForgedAlias = true; customSpawn.realWantedPlate = sharedData.forgedAliases[randomPlate].realPlate; }
+          const regPlates = Object.keys(sharedData.registry);
+          const randomPlate = regPlates[Math.floor(Math.random() * regPlates.length)];
+          customSpawn = sharedData.registry[randomPlate];
+          customSpawn.plate = randomPlate;
+          if(sharedData.forgedAliases && sharedData.forgedAliases[randomPlate]) {
+              isForgedAlias = true;
+              customSpawn.realWantedPlate = sharedData.forgedAliases[randomPlate].realPlate;
+          }
       }
-      const prefixes = ["PX","NX","TX","DV","CR","XR","ZK","AV","BN"]; let isCriminal, plate, isWanted, sex, photo, isForged, expiry, id, hasMissingID, realWantedPlate;
+
+      const prefixes = ["PX","NX","TX","DV","CR","XR","ZK","AV","BN"];
+      let isCriminal, plate, isWanted, sex, photo, isForged, expiry, id, hasMissingID, realWantedPlate;
+
       if (customSpawn) {
-          plate = customSpawn.plate; id = customSpawn.id; isWanted = customSpawn.status === 'WANTED'; isCriminal = isWanted; hasMissingID = id === "MISSING" || id === "911_REPORT" || id === "PENDING_ENFORCEMENT" || id === "UNVERIFIED"; isForged = false; realWantedPlate = customSpawn.realWantedPlate || null; sex = Math.random() > 0.5 ? "MALE" : "FEMALE"; photo = sex === "MALE" ? "👨" : "👩"; expiry = isCriminal ? "2023" : "2034";
+          plate = customSpawn.plate;
+          id = customSpawn.id;
+          isWanted = customSpawn.status === 'WANTED';
+          isCriminal = isWanted;
+          hasMissingID = id === "MISSING" || id === "911_REPORT" || id === "PENDING_ENFORCEMENT" || id === "UNVERIFIED";
+          isForged = false;
+          realWantedPlate = customSpawn.realWantedPlate || null;
+          sex = Math.random() > 0.5 ? "MALE" : "FEMALE";
+          photo = sex === "MALE" ? "👨" : "👩";
+          expiry = isCriminal ? "2023" : "2034";
       } else {
-          isCriminal = Math.random() < 0.5; plate = prefixes[Math.floor(Math.random()*prefixes.length)] + "-" + Math.floor(1000+Math.random()*9000); isWanted = false;
+          isCriminal = Math.random() < 0.5;
+          plate = prefixes[Math.floor(Math.random()*prefixes.length)] + "-" + Math.floor(1000+Math.random()*9000);
+          isWanted = false;
           if(Math.random() < 0.3 && wantedPlates.length > 0) { plate = wantedPlates[Math.floor(Math.random()*wantedPlates.length)]; isWanted = true; }
-          sex = Math.random() > 0.5 ? "MALE" : "FEMALE"; photo = sex === "MALE" ? "👨" : "👩"; isForged = false;
+          sex = Math.random() > 0.5 ? "MALE" : "FEMALE";
+          photo = sex === "MALE" ? "👨" : "👩";
+          isForged = false;
           if (isCriminal && Math.random() < 0.4) { isForged = true; photo = sex === "MALE" ? "👩" : "👨"; }
-          id = (isCriminal && Math.random() < 0.3) ? "MISSING" : "DL-" + Math.floor(1000+Math.random()*9000); hasMissingID = (isCriminal && Math.random() < 0.3); expiry = (isCriminal && Math.random() < 0.5) ? "2023" : "2034"; realWantedPlate = null;
+          id = (isCriminal && Math.random() < 0.3) ? "MISSING" : "DL-" + Math.floor(1000+Math.random()*9000);
+          hasMissingID = (isCriminal && Math.random() < 0.3);
+          expiry = (isCriminal && Math.random() < 0.5) ? "2023" : "2034";
+          realWantedPlate = null;
       }
-      let hash = 0; for (let i = 0; i < plate.length; i++) { hash = ((hash << 5) - hash) + plate.charCodeAt(i); hash = hash & hash; }
-      const testScore = Math.abs(hash % 100) + 1; const isD5Approved = testScore >= 70 && !isWanted && !isForged && !realWantedPlate;
-      car = { plate, id, hasMissingID, expired: expiry === "2023", isWanted, isForged, expiry, photo, sex, realWantedPlate, is911Emergency, isPatrolDispatch, dispatchedAgencies, d5Status: isD5Approved ? 'APPROVED' : 'REJECTED', d5Score: testScore, originDashboard };
+
+      // Deterministic D-5 test score from plate hash
+      let hash = 0;
+      for (let i = 0; i < plate.length; i++) { hash = ((hash << 5) - hash) + plate.charCodeAt(i); hash = hash & hash; }
+      const testScore = Math.abs(hash % 100) + 1;
+      const isD5Approved = testScore >= 70 && !isWanted && !isForged && !realWantedPlate;
+
+      car = {
+          plate, id, hasMissingID, expired: expiry === "2023", isWanted, isForged, expiry, photo, sex,
+          realWantedPlate, is911Emergency, isPatrolDispatch, dispatchedAgencies,
+          d5Status: isD5Approved ? 'APPROVED' : 'REJECTED',
+          d5Score: testScore,
+          originDashboard
+      };
+      
+      // Vehicle sprite class
       let vehicleClass = 'vehicle';
-      if(is911Emergency || isPatrolDispatch){ if(dispatchedAgencies.length >= 2) vehicleClass += ' agency-multi'; else if(dispatchedAgencies.includes('EMS')) vehicleClass += ' agency-ems'; else if(dispatchedAgencies.includes('FIRE')) vehicleClass += ' agency-fire'; else vehicleClass += ' agency-police'; }
-      const sprite = document.getElementById('vSprite'); sprite.className = vehicleClass; sprite.style.transition = "none"; sprite.style.left = "-250px"; void sprite.offsetWidth; sprite.style.transition = "left 1.2s ease-in-out"; sprite.style.left = "35%"; sprite.innerText = car.plate;
-      document.getElementById('btnNext').disabled = true; document.getElementById('btnScan').disabled = false; document.getElementById('btnDocs').disabled = false;
-      document.getElementById('db16Plate').innerText = "PENDING SCAN"; document.getElementById('db16Status').innerText = "AWAITING VERIFICATION"; document.getElementById('db16Status').style.color = "#888"; document.getElementById('btnMechGate').classList.add('disabled-gate');
+      if(is911Emergency || isPatrolDispatch){
+          if(dispatchedAgencies.length >= 2) vehicleClass += ' agency-multi';
+          else if(dispatchedAgencies.includes('EMS')) vehicleClass += ' agency-ems';
+          else if(dispatchedAgencies.includes('FIRE')) vehicleClass += ' agency-fire';
+          else vehicleClass += ' agency-police';
+      }
+      const sprite = document.getElementById('vSprite');
+      sprite.className = vehicleClass;
+      sprite.style.transition = "none";
+      sprite.style.left = "-250px";
+      void sprite.offsetWidth; // force reflow
+      sprite.style.transition = "left 1.2s ease-in-out";
+      sprite.style.left = "35%";
+      sprite.textContent = car.plate;
+      
+      document.getElementById('btnNext').disabled = true;
+      document.getElementById('btnScan').disabled = false;
+      document.getElementById('btnDocs').disabled = false;
+      
+      document.getElementById('db16Plate').textContent = "PENDING SCAN";
+      document.getElementById('db16Status').textContent = "AWAITING VERIFICATION";
+      document.getElementById('db16Status').style.color = "#888";
+      document.getElementById('btnMechGate').classList.add('disabled-gate');
+      
       addLog(`Incoming: ${car.plate}. Inspection required.`);
-      if(is911Emergency) { playSirenSound(); receiveMail("911_DISPATCH", "PRIORITY 1: EMERGENCY RESPONSE", `Incoming 911 Dispatch.\nPlate: ${plate}\nUnits: ${dispatchedAgencies.join(', ')}\nProceed with extreme caution.`); } else if(isPatrolDispatch) { receiveMail("NHAI_PATROL", "PATROL INTERCEPT", `Patrol unit is transferring a rogue vehicle to your gate.\nPlate: ${plate}\nEnsure armed backup.`); } else if(isWanted) { receiveMail("APB_NETWORK", "WARRANT ALERT", `Wanted fugitive detected approaching gate.\nPlate: ${plate}\nPrepare for arrest.`); }
+      
+      if(is911Emergency) {
+          playSirenSound();
+          receiveMail("911_DISPATCH", "PRIORITY 1: EMERGENCY RESPONSE", `Incoming 911 Dispatch.\nPlate: ${plate}\nUnits: ${dispatchedAgencies.join(', ')}\nProceed with extreme caution.`);
+      } else if(isPatrolDispatch) {
+          receiveMail("NHAI_PATROL", "PATROL INTERCEPT", `Patrol unit is transferring a rogue vehicle to your gate.\nPlate: ${plate}\nEnsure armed backup.`);
+      } else if(isWanted) {
+          receiveMail("APB_NETWORK", "WARRANT ALERT", `Wanted fugitive detected approaching gate.\nPlate: ${plate}\nPrepare for arrest.`);
+      }
   }
 
   /* ===== D-16 STATUS UPDATE ===== */
   function updateD16Status() {
-      const s = document.getElementById('db16Status'); const g = document.getElementById('btnMechGate');
-      if(!car){ s.innerText="NO VEHICLE"; s.style.color="#888"; g.classList.add('disabled-gate'); return; }
-      const p = car.is911Emergency || car.isPatrolDispatch; const w = car.isWanted || car.isForged || car.realWantedPlate;
-      if(w){ s.innerText="WANTED / FUGITIVE"; s.style.color="var(--danger)"; g.classList.add('disabled-gate'); }
-      else if(!p){ s.innerText="STANDARD CIVILIAN"; s.style.color="var(--warning)"; g.classList.add('disabled-gate'); }
-      else{ s.innerText="GOVT / VIP / EMERGENCY"; s.style.color="var(--success)"; g.classList.remove('disabled-gate'); }
+      const s = document.getElementById('db16Status');
+      const g = document.getElementById('btnMechGate');
+      if(!car){ s.textContent="NO VEHICLE"; s.style.color="#888"; g.classList.add('disabled-gate'); return; }
+      const p = car.is911Emergency || car.isPatrolDispatch;
+      const w = car.isWanted || car.isForged || car.realWantedPlate;
+      if(w){ s.textContent="WANTED / FUGITIVE"; s.style.color="var(--danger)"; g.classList.add('disabled-gate'); }
+      else if(!p){ s.textContent="STANDARD CIVILIAN"; s.style.color="var(--warning)"; g.classList.add('disabled-gate'); }
+      else{ s.textContent="GOVT / VIP / EMERGENCY"; s.style.color="var(--success)"; g.classList.remove('disabled-gate'); }
   }
 
   /* ===== DOCUMENT INSPECTION ===== */
   function toggleDocs() {
       const doc = document.getElementById('docOverlay');
-      if(doc.style.display === "block") { doc.style.display = "none"; } else {
+      if(doc.style.display === "block") { doc.style.display = "none"; }
+      else {
           if(!car) return;
-          if(car.id === "PENDING_ENFORCEMENT" && car.originDashboard === "D2") { document.getElementById('tollCasePlate').innerText = car.plate; document.getElementById('tollCaseLayout').classList.add('active'); addLog("TOLL CASE: Displaying verification layout.", "var(--warning)"); return; }
-          document.getElementById('dID').innerText = car.id; document.getElementById('dExp').innerText = car.expiry; document.getElementById('dName').innerText = "SUBJECT_" + car.plate; document.getElementById('dSex').innerText = car.sex; document.getElementById('dPhoto').innerText = car.photo;
-          document.getElementById('forgeryBox').style.display = car.realWantedPlate ? "block" : "none"; if(car.realWantedPlate) document.getElementById('dRealPlate').innerText = car.realWantedPlate;
+          
+          // TOLL ENFORCEMENT CHECK OVERRIDE
+          if(car.id === "PENDING_ENFORCEMENT" && car.originDashboard === "D2") {
+              document.getElementById('tollCasePlate').textContent = car.plate;
+              document.getElementById('tollCaseLayout').classList.add('active');
+              addLog("TOLL CASE: Displaying verification layout.", "var(--warning)");
+              return;
+          }
+
+          document.getElementById('dID').textContent = car.id;
+          document.getElementById('dExp').textContent = car.expiry;
+          document.getElementById('dName').textContent = "SUBJECT_" + car.plate;
+          document.getElementById('dSex').textContent = car.sex;
+          document.getElementById('dPhoto').textContent = car.photo;
+          document.getElementById('forgeryBox').style.display = car.realWantedPlate ? "block" : "none";
+          if(car.realWantedPlate) document.getElementById('dRealPlate').textContent = car.realWantedPlate;
+
           const agencyBox = document.getElementById('agencyTagsBox');
-          if((car.is911Emergency || car.isPatrolDispatch) && car.dispatchedAgencies && car.dispatchedAgencies.length > 0){ agencyBox.style.display = 'flex'; agencyBox.innerHTML = ''; car.dispatchedAgencies.forEach(u => { const cls = u === 'POLICE' ? 'tag-police' : u === 'EMS' ? 'tag-ems' : 'tag-fire'; agencyBox.innerHTML += `<span class="agency-tag ${cls}">${u}</span>`; }); } else { agencyBox.style.display = 'none'; }
+          if((car.is911Emergency || car.isPatrolDispatch) && car.dispatchedAgencies && car.dispatchedAgencies.length > 0){
+              agencyBox.style.display = 'flex';
+              agencyBox.innerHTML = '';
+              car.dispatchedAgencies.forEach(u => {
+                  const cls = u === 'POLICE' ? 'tag-police' : u === 'EMS' ? 'tag-ems' : 'tag-fire';
+                  const span = document.createElement('span'); span.className = `agency-tag ${cls}`; span.textContent = u;
+                  agencyBox.appendChild(span);
+              });
+          } else { agencyBox.style.display = 'none'; }
+
           const missingOverlay = document.getElementById('missingIdOverlay');
-          if(car.hasMissingID || car.id === "MISSING" || car.id === "UNVERIFIED" || car.id === "PENDING_ENFORCEMENT") { missingOverlay.classList.add('active'); playSound('buzzer'); } else { missingOverlay.classList.remove('active'); }
-          doc.style.display = "block"; addLog(`Credentials visible. Copy to verification unit.`, "var(--accent)");
+          if(car.hasMissingID || car.id === "MISSING" || car.id === "UNVERIFIED" || car.id === "PENDING_ENFORCEMENT") {
+              missingOverlay.classList.add('active');
+              playSound('buzzer');
+          } else { missingOverlay.classList.remove('active'); }
+
+          doc.style.display = "block";
+          addLog(`Credentials visible. Copy to verification unit.`, "var(--accent)");
       }
   }
 
   /* ===== TOLL CASE RESOLUTION ===== */
   function resolveTollCase(status) {
-      if(!car) return; document.getElementById('tollCaseLayout').classList.remove('active');
-      sharedData.registry[car.plate] = { id: status === 'CLEAR' ? "ENFORCEMENT_CLEARED" : "UNVERIFIED", vClass: "LVM_CLASS_1", status: status, registeredBy: "ENFORCEMENT_D1", name: status === 'CLEAR' ? "CIVILIAN" : "UNKNOWN", sex: "N/A" }; saveData();
-      if(status === 'CLEAR') { addLog(`TOLL CASE APPROVED: ${car.plate} cleared.`, "var(--success)"); playSound('success'); } else { addLog(`TOLL CASE REJECTED: ${car.plate} marked invalid.`, "var(--danger)"); playSound('buzzer'); }
+      if(!car) return;
+      document.getElementById('tollCaseLayout').classList.remove('active');
+      
+      sharedData.registry[car.plate] = {
+          id: status === 'CLEAR' ? "ENFORCEMENT_CLEARED" : "UNVERIFIED",
+          vClass: "LVM_CLASS_1",
+          status: status,
+          registeredBy: "ENFORCEMENT_D1",
+          name: status === 'CLEAR' ? "CIVILIAN" : "UNKNOWN",
+          sex: "N/A"
+      };
+
+      saveData();
+
+      if(status === 'CLEAR') {
+          addLog(`TOLL CASE APPROVED: ${car.plate} cleared.`, "var(--success)");
+          playSound('success');
+      } else {
+          addLog(`TOLL CASE REJECTED: ${car.plate} marked invalid.`, "var(--danger)");
+          playSound('buzzer');
+      }
+      
       setTimeout(() => { triggerRelease(); }, 1500);
   }
-  function acknowledgeMissingID() { document.getElementById('missingIdOverlay').classList.remove('active'); addLog("OFFICER ACKNOWLEDGED: Missing ID record flagged.", "var(--warning)"); }
+  
+  function acknowledgeMissingID() {
+      document.getElementById('missingIdOverlay').classList.remove('active');
+      addLog("OFFICER ACKNOWLEDGED: Missing ID record flagged.", "var(--warning)");
+  }
 
   /* ===== DATABASE SCAN ===== */
   function runSystemScan() {
-      if(!car || isScanning) return; const pIn = (document.getElementById('plateIn').value || "").toUpperCase().trim(); const lIn = (document.getElementById('licenseIn').value || "").toUpperCase().trim();
-      document.getElementById('btnScan').disabled = true; isScanning = true;
-      const scanFx = document.getElementById('scanEffect'); scanFx.classList.remove('active'); void scanFx.offsetWidth; scanFx.classList.add('active'); addLog("Querying Intelligence Network...");
+      if(!car || isScanning) return;
+      const pIn = (document.getElementById('plateIn').value || "").toUpperCase().trim();
+      const lIn = (document.getElementById('licenseIn').value || "").toUpperCase().trim();
+      document.getElementById('btnScan').disabled = true;
+      isScanning = true;
+
+      const scanFx = document.getElementById('scanEffect');
+      scanFx.classList.remove('active');
+      void scanFx.offsetWidth;
+      scanFx.classList.add('active');
+      addLog("Querying Intelligence Network...");
+
       setTimeout(() => {
-          isScanning = false; document.getElementById('btnScan').disabled = false;
-          if(car.realWantedPlate && pIn === car.realWantedPlate) { addLog("CRIMINAL ALERT: WANTED FUGITIVE PLATE DETECTED UNDER FORGED ALIAS!", "var(--danger)"); document.getElementById('vSprite').classList.add('criminal-alert'); document.getElementById('btnArrest').disabled = false; document.getElementById('btnRelease').disabled = true; playSirenSound(); return; }
-          if (pIn !== car.plate || lIn !== car.id) { addLog("SCAN ERROR: INPUT DATA DISCREPANCY.", "var(--warning)"); playSound('error'); return; }
-          document.getElementById('db16Plate').innerText = car.plate; updateD16Status();
+          isScanning = false;
+          document.getElementById('btnScan').disabled = false;
+
+          // Forged alias real-plate check
+          if(car.realWantedPlate && pIn === car.realWantedPlate) {
+              addLog("CRIMINAL ALERT: WANTED FUGITIVE PLATE DETECTED UNDER FORGED ALIAS!", "var(--danger)");
+              document.getElementById('vSprite').classList.add('criminal-alert');
+              document.getElementById('btnArrest').disabled = false;
+              document.getElementById('btnRelease').disabled = true;
+              playSirenSound();
+              return;
+          }
+
+          // Input mismatch (allow blanks to pass through safely)
+          if ((pIn && pIn !== car.plate) || (lIn && lIn !== car.id)) {
+              addLog("SCAN ERROR: INPUT DATA DISCREPANCY.", "var(--warning)");
+              playSound('error');
+              return;
+          }
+          
+          // Update D-16
+          document.getElementById('db16Plate').textContent = car.plate;
+          updateD16Status();
+
+          // Protocol sounds
           if(car.originDashboard === "D16") { playSound('protocol_d16'); addLog(`🔔 PROTOCOL D-16: VIP/Govt Fast-Track Verified.`, "var(--accent)"); receiveMail("D16_GOV_OFFICE", "VIP FAST TRACK", `Verified VIP clearance for ${car.plate}. Authorized for Mechanical Gate Override.`); }
           else if(car.originDashboard === "D2") { playSound('protocol_d2'); addLog(`🔔 PROTOCOL D-2: Enforcement Transfer Verified.`, "var(--warning)"); }
           else if(car.originDashboard === "D7") { playSound('protocol_d7'); addLog(`🔔 PROTOCOL D-7: High-Value Jail Target Verified.`, "var(--danger)"); }
+
           let alertFlags = [];
-          if (car.isWanted) alertFlags.push("WANTED FUGITIVE"); if (car.expired) alertFlags.push("EXPIRED CREDENTIALS"); if (car.hasMissingID) alertFlags.push("NO VERIFIED RECORD"); if (car.isForged) alertFlags.push("DOCUMENT FORGERY");
+          if (car.isWanted) alertFlags.push("WANTED FUGITIVE");
+          if (car.expired) alertFlags.push("EXPIRED CREDENTIALS");
+          if (car.hasMissingID) alertFlags.push("NO VERIFIED RECORD");
+          if (car.isForged) alertFlags.push("DOCUMENT FORGERY");
+          
           if (alertFlags.length > 0) {
               const isStrictlyCriminal = car.isWanted || car.isForged || car.realWantedPlate;
-              if(isStrictlyCriminal) { addLog(`CRIMINAL ALERT: ${alertFlags.join(" & ")} DETECTED.`, "var(--danger)"); document.getElementById('vSprite').classList.add('criminal-alert'); document.getElementById('btnArrest').disabled = false; document.getElementById('btnRelease').disabled = true; playSirenSound(); }
-              else { addLog(`SECURITY ALERT: ${alertFlags.join(" & ")} DETECTED. Check D-5 for renewal eligibility.`, "var(--warning)"); playSound('buzzer'); if (!car.isWanted && !car.isForged) document.getElementById('btnPay').disabled = false; }
-          } else if (car.d5Status === 'REJECTED') { addLog("SECURITY ALERT: D-5 REGISTRATION REJECTED. Entry Denied. Subject must be turned away or pay for ID renewal.", "var(--warning)"); playSound('buzzer'); document.getElementById('btnPay').disabled = false; document.getElementById('btnRelease').disabled = true; }
-          else { addLog("SCAN SUCCESS: CITIZEN STATUS CLEAR.", "var(--success)"); document.getElementById('btnRelease').disabled = false; playSound('success'); }
+              if(isStrictlyCriminal) {
+                  addLog(`CRIMINAL ALERT: ${alertFlags.join(" & ")} DETECTED.`, "var(--danger)");
+                  document.getElementById('vSprite').classList.add('criminal-alert');
+                  document.getElementById('btnArrest').disabled = false;
+                  document.getElementById('btnRelease').disabled = true;
+                  playSirenSound();
+              } else {
+                  addLog(`SECURITY ALERT: ${alertFlags.join(" & ")} DETECTED. Check D-5 for renewal eligibility.`, "var(--warning)");
+                  playSound('buzzer');
+                  if (!car.isWanted && !car.isForged) document.getElementById('btnPay').disabled = false;
+              }
+          } else if (car.d5Status === 'REJECTED') {
+              addLog("SECURITY ALERT: D-5 REGISTRATION REJECTED. Entry Denied. Subject must be turned away or pay for ID renewal.", "var(--warning)");
+              playSound('buzzer');
+              document.getElementById('btnPay').disabled = false;
+              document.getElementById('btnRelease').disabled = true;
+          } else {
+              addLog("SCAN SUCCESS: CITIZEN STATUS CLEAR.", "var(--success)");
+              document.getElementById('btnRelease').disabled = false;
+              playSound('success');
+          }
       }, 600);
   }
 
   /* ===== ISSUE PAID ID ===== */
   function issuePaidID() {
-      if(!car || car.isWanted || car.isForged || car.realWantedPlate) return; revenue += 150; const newID = "DL-NEW-" + Math.floor(1000+Math.random()*9000);
-      car.id = newID; car.hasMissingID = false; car.expired = false; car.expiry = "2036"; car.d5Status = 'APPROVED';
-      document.getElementById('licenseIn').value = newID; document.getElementById('dID').innerText = newID; document.getElementById('dExp').innerText = "2036";
-      addLog(`ID RE-ISSUED: ${newID}. D-5 Override Applied. Infractions cleared.`, "var(--success)"); history.push({ plate: car.plate, id: newID, action: "ID RENEWED", timestamp: new Date().toLocaleTimeString() });
-      document.getElementById('btnPay').disabled = true; document.getElementById('btnRelease').disabled = false; document.getElementById('btnArrest').disabled = true; document.getElementById('vSprite').classList.remove('criminal-alert'); stopSirenSound(); playSound('cash'); saveData(); updateStatusUI();
+      if(!car || car.isWanted || car.isForged || car.realWantedPlate) return;
+      revenue += 150;
+      const newID = "DL-NEW-" + Math.floor(1000+Math.random()*9000);
+      car.id = newID;
+      car.hasMissingID = false;
+      car.expired = false;
+      car.expiry = "2036";
+      car.d5Status = 'APPROVED';
+      document.getElementById('licenseIn').value = newID;
+      document.getElementById('dID').textContent = newID;
+      document.getElementById('dExp').textContent = "2036";
+      addLog(`ID RE-ISSUED: ${newID}. D-5 Override Applied. Infractions cleared.`, "var(--success)");
+      history.push({ plate: car.plate, id: newID, action: "ID RENEWED", timestamp: new Date().toLocaleTimeString() });
+      document.getElementById('btnPay').disabled = true;
+      document.getElementById('btnRelease').disabled = false;
+      document.getElementById('btnArrest').disabled = true;
+      document.getElementById('vSprite').classList.remove('criminal-alert');
+      stopSirenSound();
+      playSound('cash');
+      saveData(); updateStatusUI();
   }
 
   /* ===== STAMP DOCUMENT ===== */
   function stampDoc(app) {
-      if(!car) return; const s = document.getElementById('stampBox'); s.innerText = app ? "APPROVED" : "DENIED"; s.style.color = app ? "var(--success)" : "var(--danger)"; s.style.borderColor = app ? "var(--success)" : "var(--danger)"; s.style.display = "flex"; const isSevereCriminal = car.isWanted || car.isForged || car.realWantedPlate;
-      if (app) { if(isSevereCriminal) { addLog("APPROVAL OVERRIDE BLOCKED: Wanted/Forged subjects must be arrested.", "var(--danger)"); playSound('error'); return; } if(car.d5Status !== 'APPROVED') { addLog("APPROVAL BLOCKED: D-5 Registration Application is REJECTED. Deny entry.", "var(--warning)"); playSound('buzzer'); document.getElementById('btnArrest').disabled = true; document.getElementById('btnRelease').disabled = true; document.getElementById('btnPay').disabled = true; return; } addLog("MANUAL APPROVAL ISSUED.", "var(--success)"); document.getElementById('btnRelease').disabled = false; document.getElementById('btnArrest').disabled = true; playSound('stamp'); }
-      else { if(isSevereCriminal) { addLog("ENTRY DENIED: Criminal subject flagged for arrest.", "var(--danger)"); document.getElementById('btnArrest').disabled = false; document.getElementById('btnRelease').disabled = true; document.getElementById('btnPay').disabled = true; playSound('buzzer'); } else { addLog("ENTRY DENIED: Unverified citizen turned away. (Failed D-5 / Administrative Hold)", "var(--warning)"); document.getElementById('btnArrest').disabled = true; document.getElementById('btnRelease').disabled = true; document.getElementById('btnPay').disabled = true; playSound('buzzer'); setTimeout(() => { if(car) { valids++; revenue += 0; rankPoints += 1; addLog("SUBJECT TURNED AWAY: Gate secured. [+1 Rank Point]", "var(--success)"); history.push({ plate: car.plate, id: car.id, action: "TURNED AWAY (DENIED)", timestamp: new Date().toLocaleTimeString() }); updateLevel(); saveData(); updateStatusUI(); resetStage(); } }, 1500); } }
+      if(!car) return;
+      const s = document.getElementById('stampBox');
+      s.textContent = app ? "APPROVED" : "DENIED";
+      s.style.color = app ? "var(--success)" : "var(--danger)";
+      s.style.borderColor = app ? "var(--success)" : "var(--danger)";
+      s.style.display = "flex";
+      const isSevereCriminal = car.isWanted || car.isForged || car.realWantedPlate;
+      
+      if (app) {
+          if(isSevereCriminal) {
+              addLog("APPROVAL OVERRIDE BLOCKED: Wanted/Forged subjects must be arrested.", "var(--danger)");
+              playSound('error');
+              return;
+          }
+          if(car.d5Status !== 'APPROVED') {
+              addLog("APPROVAL BLOCKED: D-5 Registration Application is REJECTED. Deny entry.", "var(--warning)");
+              playSound('buzzer');
+              document.getElementById('btnArrest').disabled = true;
+              document.getElementById('btnRelease').disabled = true;
+              document.getElementById('btnPay').disabled = true;
+              return;
+          }
+          addLog("MANUAL APPROVAL ISSUED.", "var(--success)");
+          document.getElementById('btnRelease').disabled = false;
+          document.getElementById('btnArrest').disabled = true;
+          playSound('stamp');
+      } else {
+          if(isSevereCriminal) {
+              addLog("ENTRY DENIED: Criminal subject flagged for arrest.", "var(--danger)");
+              document.getElementById('btnArrest').disabled = false;
+              document.getElementById('btnRelease').disabled = true;
+              document.getElementById('btnPay').disabled = true;
+              playSound('buzzer');
+          } else {
+              addLog("ENTRY DENIED: Unverified citizen turned away. (Failed D-5 / Administrative Hold)", "var(--warning)");
+              document.getElementById('btnArrest').disabled = true;
+              document.getElementById('btnRelease').disabled = true;
+              document.getElementById('btnPay').disabled = true;
+              playSound('buzzer');
+              
+              setTimeout(() => {
+                  if(car) {
+                      valids++;
+                      revenue += 0;
+                      rankPoints += 1;
+                      addLog("SUBJECT TURNED AWAY: Gate secured. [+1 Rank Point]", "var(--success)");
+                      history.push({ plate: car.plate, id: car.id, action: "TURNED AWAY (DENIED)", timestamp: new Date().toLocaleTimeString() });
+                      updateLevel(); saveData(); updateStatusUI(); resetStage();
+                  }
+              }, 1500);
+          }
+      }
   }
 
   /* ===== GATE RELEASE ===== */
   function triggerRelease() {
-      if(!car) return; const isGuilty = car.isWanted || car.isForged || car.realWantedPlate; playSound('gate'); stopSirenSound();
-      if (isGuilty) { missed++; rankPoints -= 3; addLog("SECURITY FAILURE: Invalid subject cleared gate. [-3 Rank Points]", "var(--danger)"); }
-      else { valids++; revenue += 50; rankPoints += 2; const actionText = car.expired || car.hasMissingID ? "RELEASED (TURNED AWAY)" : "RELEASED"; addLog(`VALID RELEASE: Citizen cleared. +$50 [+2 Rank Points]`, "var(--success)"); history.push({ plate: car.plate, id: car.id, action: actionText, timestamp: new Date().toLocaleTimeString() }); }
+      if(!car) return;
+      const isGuilty = car.isWanted || car.isForged || car.realWantedPlate;
+      playSound('gate'); stopSirenSound();
+      if (isGuilty) {
+          missed++;
+          rankPoints -= 3;
+          addLog("SECURITY FAILURE: Invalid subject cleared gate. [-3 Rank Points]", "var(--danger)");
+      } else {
+          valids++;
+          revenue += 50;
+          rankPoints += 2;
+          const actionText = car.expired || car.hasMissingID ? "RELEASED (TURNED AWAY)" : "RELEASED";
+          addLog(`VALID RELEASE: Citizen cleared. +$50 [+2 Rank Points]`, "var(--success)");
+          history.push({ plate: car.plate, id: car.id, action: actionText, timestamp: new Date().toLocaleTimeString() });
+      }
       updateLevel(); saveData(); updateStatusUI(); resetStage();
   }
 
   /* ===== ARREST ===== */
   function triggerArrest() {
-      if(!car) return; const isGuilty = car.isWanted || car.hasMissingID || car.expired || car.isForged || car.realWantedPlate; playSound('arrest'); stopSirenSound();
-      if (isGuilty) { valids++; revenue += 200; rankPoints += 2; addLog("VALID ARREST: Criminal detained. +$200 Bounty [+2 Rank Points]", "var(--success)"); } else { missed++; rankPoints -= 3; addLog("SECURITY BREACH: Wrongful arrest of innocent citizen. [-3 Rank Points]", "var(--danger)"); }
-      let logPlate = car.realWantedPlate ? `${car.plate} (Real: ${car.realWantedPlate})` : car.plate; history.push({ plate: logPlate, id: car.id, action: "ARRESTED", timestamp: new Date().toLocaleTimeString() });
-      clearWarrantOnArrest(car.plate); if (car.realWantedPlate) clearWarrantOnArrest(car.realWantedPlate); updateLevel(); saveData(); updateStatusUI(); resetStage();
+      if(!car) return;
+      const isGuilty = car.isWanted || car.hasMissingID || car.expired || car.isForged || car.realWantedPlate;
+      playSound('arrest'); stopSirenSound();
+      if (isGuilty) {
+          valids++;
+          revenue += 200;
+          rankPoints += 2;
+          addLog("VALID ARREST: Criminal detained. +$200 Bounty [+2 Rank Points]", "var(--success)");
+      } else {
+          missed++;
+          rankPoints -= 3;
+          addLog("SECURITY BREACH: Wrongful arrest of innocent citizen. [-3 Rank Points]", "var(--danger)");
+      }
+      let logPlate = car.realWantedPlate ? `${car.plate} (Real: ${car.realWantedPlate})` : car.plate;
+      history.push({ plate: logPlate, id: car.id, action: "ARRESTED", timestamp: new Date().toLocaleTimeString() });
+      clearWarrantOnArrest(car.plate);
+      if (car.realWantedPlate) clearWarrantOnArrest(car.realWantedPlate);
+      updateLevel(); saveData(); updateStatusUI(); resetStage();
   }
 
   /* ===== WARRANT CLEARING ===== */
   function clearWarrantOnArrest(plate) {
       let inmateData = null;
-      if (sharedData.forgedAliases && sharedData.forgedAliases[plate]) { inmateData = { plate: plate, realPlate: sharedData.forgedAliases[plate].realPlate, id: sharedData.forgedAliases[plate].fakeId, offense: "FORGERY & FUGITIVE", dateArrested: new Date().toLocaleDateString(), facility: "MAXIMUM SECURITY", status: "ARRESTED", sentenceDays: 90, sentenceRemaining: 90 }; delete sharedData.forgedAliases[plate]; }
-      else if (sharedData.registry[plate]) { const reg = sharedData.registry[plate]; let offense = "WARRANT / ROGUE", facility = "CENTRAL DETENTION", sentence = 60; if(reg.registeredBy === "911_OPERATOR" || reg.source === "911_DISPATCH"){ offense = "911 FELONY"; facility = "FEDERAL HOLD"; sentence = 120; } inmateData = { plate: plate, realPlate: plate, id: reg.id, offense: offense, dateArrested: new Date().toLocaleDateString(), facility: facility, status: "ARRESTED", sentenceDays: sentence, sentenceRemaining: sentence }; }
-      if (inmateData) { if(!sharedData.activeInmates) sharedData.activeInmates = []; sharedData.activeInmates.push(inmateData); }
-      if (sharedData.registry[plate]) delete sharedData.registry[plate]; saveData();
+      if (sharedData.forgedAliases && sharedData.forgedAliases[plate]) {
+          inmateData = {
+              plate: plate,
+              realPlate: sharedData.forgedAliases[plate].realPlate,
+              id: sharedData.forgedAliases[plate].fakeId,
+              offense: "FORGERY & FUGITIVE",
+              dateArrested: new Date().toLocaleDateString(),
+              facility: "MAXIMUM SECURITY",
+              status: "ARRESTED",
+              sentenceDays: 90,
+              sentenceRemaining: 90
+          };
+          delete sharedData.forgedAliases[plate];
+      } else if (sharedData.registry && sharedData.registry[plate]) {
+          const reg = sharedData.registry[plate];
+          let offense = "WARRANT / ROGUE", facility = "CENTRAL DETENTION", sentence = 60;
+          if(reg.registeredBy === "911_OPERATOR" || reg.source === "911_DISPATCH"){
+              offense = "911 FELONY"; facility = "FEDERAL HOLD"; sentence = 120;
+          }
+          inmateData = {
+              plate: plate, realPlate: plate, id: reg.id,
+              offense: offense, dateArrested: new Date().toLocaleDateString(),
+              facility: facility, status: "ARRESTED",
+              sentenceDays: sentence, sentenceRemaining: sentence
+          };
+      }
+      if (inmateData) {
+          if(!sharedData.activeInmates) sharedData.activeInmates = [];
+          sharedData.activeInmates.push(inmateData);
+      }
+      if (sharedData.registry && sharedData.registry[plate]) delete sharedData.registry[plate];
   }
 
   /* ===== LEVEL / STATUS ===== */
-  function updateLevel() { rankPoints = Math.max(0, rankPoints); const newLevel = Math.floor(rankPoints / 10) + 1; if (newLevel > level) addLog(`★★★ PROMOTION: STATION RANK INCREASED TO LVL ${newLevel}! ★★★`, "var(--warning)"); else if (newLevel < level) addLog(`DEMOTION: STATION RANK DECREASED TO LVL ${newLevel}.`, "var(--danger)"); level = newLevel; }
-  function updateStatusUI() { document.getElementById('valCount').innerText = valids; document.getElementById('missCount').innerText = missed; document.getElementById('salVal').innerText = revenue; document.getElementById('lvlVal').innerText = level; document.getElementById('ptsVal').innerText = rankPoints % 10; }
+  function updateLevel() {
+      rankPoints = Math.max(0, rankPoints);
+      const newLevel = Math.floor(rankPoints / 10) + 1;
+      if (newLevel > level) addLog(`★★★ PROMOTION: STATION RANK INCREASED TO LVL ${newLevel}! ★★★`, "var(--warning)");
+      else if (newLevel < level) addLog(`DEMOTION: STATION RANK DECREASED TO LVL ${newLevel}.`, "var(--danger)");
+      level = newLevel;
+  }
+
+  function updateStatusUI() {
+      document.getElementById('valCount').textContent = valids;
+      document.getElementById('missCount').textContent = missed;
+      document.getElementById('salVal').textContent = revenue;
+      document.getElementById('lvlVal').textContent = level;
+      document.getElementById('ptsVal').textContent = rankPoints;
+  }
 
   /* ===== STAGE RESET ===== */
   function resetStage() {
-      const sprite = document.getElementById('vSprite'); sprite.style.left = "120%"; sprite.classList.remove('criminal-alert','emergency-vehicle','agency-police','agency-ems','agency-fire','agency-multi'); isResetting = true; car = null;
-      document.getElementById('plateIn').value = ""; document.getElementById('licenseIn').value = ""; document.getElementById('searchPlateIn').value = ""; document.getElementById('docOverlay').style.display = "none"; document.getElementById('stampBox').style.display = "none"; document.getElementById('forgeryBox').style.display = "none"; document.getElementById('agencyTagsBox').style.display = "none"; document.getElementById('missingIdOverlay').classList.remove('active'); document.getElementById('tollCaseLayout').classList.remove('active');
-      document.getElementById('btnNext').disabled = true; document.getElementById('btnScan').disabled = true; document.getElementById('btnDocs').disabled = true; document.getElementById('btnArrest').disabled = true; document.getElementById('btnRelease').disabled = true; document.getElementById('btnPay').disabled = true;
-      document.getElementById('db16Plate').innerText = "NONE"; document.getElementById('db16Status').innerText = "---"; document.getElementById('db16Status').style.color = "var(--success)"; document.getElementById('btnMechGate').classList.add('disabled-gate');
-      setTimeout(() => { sprite.style.transition = "none"; sprite.style.left = "-250px"; isResetting = false; document.getElementById('btnNext').disabled = false; }, 1300);
+      const sprite = document.getElementById('vSprite');
+      sprite.style.left = "120%";
+      sprite.classList.remove('criminal-alert','emergency-vehicle','agency-police','agency-ems','agency-fire','agency-multi');
+      isResetting = true;
+      car = null;
+      document.getElementById('plateIn').value = "";
+      document.getElementById('licenseIn').value = "";
+      document.getElementById('searchPlateIn').value = "";
+      document.getElementById('docOverlay').style.display = "none";
+      document.getElementById('stampBox').style.display = "none";
+      document.getElementById('forgeryBox').style.display = "none";
+      document.getElementById('agencyTagsBox').style.display = "none";
+      document.getElementById('missingIdOverlay').classList.remove('active');
+      document.getElementById('tollCaseLayout').classList.remove('active');
+      document.getElementById('btnNext').disabled = true;
+      document.getElementById('btnScan').disabled = true;
+      document.getElementById('btnDocs').disabled = true;
+      document.getElementById('btnArrest').disabled = true;
+      document.getElementById('btnRelease').disabled = true;
+      document.getElementById('btnPay').disabled = true;
+      document.getElementById('db16Plate').textContent = "NONE";
+      document.getElementById('db16Status').textContent = "---";
+      document.getElementById('db16Status').style.color = "var(--success)";
+      document.getElementById('btnMechGate').classList.add('disabled-gate');
+      setTimeout(() => {
+          sprite.style.transition = "none";
+          sprite.style.left = "-250px";
+          isResetting = false;
+          document.getElementById('btnNext').disabled = false;
+      }, 1300);
   }
 
   /* ===== SECONDARY LAYOUT TOGGLE ===== */
   function toggleSecondaryLayout(type) {
-      if(type === 'dbs') { document.getElementById('dbLayout').classList.toggle('active'); document.getElementById('mailLayout').classList.remove('active'); if(document.getElementById('dbLayout').classList.contains('active')) refreshDashboards(); }
-      else { document.getElementById('mailLayout').classList.toggle('active'); document.getElementById('dbLayout').classList.remove('active'); if(document.getElementById('mailLayout').classList.contains('active')) renderMailList('inbox'); }
+      if(type === 'dbs') {
+          document.getElementById('dbLayout').classList.toggle('active');
+          document.getElementById('mailLayout').classList.remove('active');
+          if(document.getElementById('dbLayout').classList.contains('active')) refreshDashboards();
+      } else {
+          document.getElementById('mailLayout').classList.toggle('active');
+          document.getElementById('dbLayout').classList.remove('active');
+          if(document.getElementById('mailLayout').classList.contains('active')) renderMailList('inbox');
+      }
   }
 
   /* ===== DASHBOARD REFRESH ===== */
   function refreshDashboards() {
-      const db2 = document.getElementById('db2Content'); db2.innerHTML = ''; const hist = sharedData.history || [];
+      // D-2 Enforcement Log
+      const db2 = document.getElementById('db2Content');
+      db2.innerHTML = '';
+      const hist = sharedData.history || [];
       if(hist.length === 0) db2.innerHTML = '<div style="color: #555;">No enforcement logs found.</div>';
-      else hist.slice(-20).reverse().forEach(h => { db2.innerHTML += `<div class="data-row"><span>${h.plate}</span><span style="color:${h.action.includes('ARRESTED')?'var(--danger)':'var(--success)'}">${h.action}</span><span style="color:#888">${h.timestamp||'N/A'}</span></div>`; });
-      const db7 = document.getElementById('db7Content'); db7.innerHTML = ''; const inmates = sharedData.activeInmates || [];
+      else hist.slice(-20).reverse().forEach(h => {
+          const row = document.createElement('div'); row.className = 'data-row';
+          const plateSpan = document.createElement('span'); plateSpan.textContent = h.plate;
+          const actionSpan = document.createElement('span'); actionSpan.style.color = h.action.includes('ARRESTED')?'var(--danger)':'var(--success)'; actionSpan.textContent = h.action;
+          const timeSpan = document.createElement('span'); timeSpan.style.color = '#888'; timeSpan.textContent = h.timestamp||'N/A';
+          row.appendChild(plateSpan); row.appendChild(actionSpan); row.appendChild(timeSpan);
+          db2.appendChild(row);
+      });
+      
+      // D-7 Inmate Holding Log
+      const db7 = document.getElementById('db7Content');
+      db7.innerHTML = '';
+      const inmates = sharedData.activeInmates || [];
       if(inmates.length === 0) db7.innerHTML = '<div style="color: #555;">Holding cells empty.</div>';
-      else inmates.forEach(inmate => { db7.innerHTML += `<div class="data-row" style="flex-direction:column; align-items:flex-start;"><span style="color:var(--danger); font-weight:bold;">${inmate.plate} (${inmate.id})</span><span style="font-size:0.7rem; color:#aaa;">Offense: ${inmate.offense} | Facility: ${inmate.facility}</span></div>`; });
+      else inmates.forEach(inmate => {
+          const row = document.createElement('div'); row.className = 'data-row'; row.style.cssText = 'flex-direction:column; align-items:flex-start;';
+          const top = document.createElement('span'); top.style.cssText = 'color:var(--danger); font-weight:bold;'; top.textContent = `${inmate.plate} (${inmate.id})`;
+          const bot = document.createElement('span'); bot.style.cssText = 'font-size:0.7rem; color:#aaa;'; bot.textContent = `Offense: ${inmate.offense} | Facility: ${inmate.facility}`;
+          row.appendChild(top); row.appendChild(bot);
+          db7.appendChild(row);
+      });
   }
 
   /* ===== D-4 / D-5 SEARCH ===== */
   function searchApplicationHistory() {
       const plateSearch = (document.getElementById('searchPlateIn').value || "").toUpperCase().trim();
       if(!plateSearch) { addLog("SEARCH ERROR: Enter a plate in the Search field.", "var(--warning)"); playSound('error'); return; }
-      addLog(`Querying D-4 & D-5 for: ${plateSearch}...`, "var(--accent)"); const db4 = document.getElementById('db4Content'); db4.innerHTML = '<div style="color: var(--accent);">SEARCHING D-4...</div>'; const db5 = document.getElementById('db5Content'); db5.innerHTML = '<div style="color: var(--accent);">SEARCHING D-5...</div>';
+      addLog(`Querying D-4 & D-5 for: ${plateSearch}...`, "var(--accent)");
+      
+      const db4 = document.getElementById('db4Content');
+      db4.innerHTML = '<div style="color: var(--accent);">SEARCHING D-4...</div>';
+      const db5 = document.getElementById('db5Content');
+      db5.innerHTML = '<div style="color: var(--accent);">SEARCHING D-5...</div>';
+      
       setTimeout(() => {
-          let historyHTML = ''; const regData = sharedData.registry[plateSearch]; const aliasData = sharedData.forgedAliases ? sharedData.forgedAliases[plateSearch] : null;
-          if (regData) { historyHTML += `<div class="data-row" style="color:var(--warning); font-weight:bold;"><span>REGISTRY FOUND</span><span>${plateSearch}</span></div>`; historyHTML += `<div class="data-row"><span>ID:</span><span style="color:var(--success)">${regData.id}</span></div>`; historyHTML += `<div class="data-row"><span>Status:</span><span style="color:${regData.status==='WANTED'?'var(--danger)':'var(--success)'}">${regData.status}</span></div>`; if(regData.status === 'WANTED') historyHTML += `<div style="margin-top:10px; padding:8px; border:1px solid var(--danger); color:var(--danger); text-align:center;">⚠ APPLICATION REJECTED - SUBJECT WANTED ⚠</div>`; else if (regData.id === 'MISSING' || regData.id === 'UNVERIFIED') historyHTML += `<div style="margin-top:10px; padding:8px; border:1px solid var(--warning); color:var(--warning); text-align:center;">⚠ APPLICATION PENDING - UNVERIFIED ⚠</div>`; }
-          if (aliasData) { historyHTML += `<div class="data-row" style="color:var(--danger); font-weight:bold; margin-top:10px;"><span>FORGERY FLAG</span><span>DETECTED</span></div><div style="margin-top:10px; padding:8px; border:1px solid var(--danger); color:var(--danger); text-align:center;">⚠ APPLICATION REJECTED - FORGERY ⚠</div>`; }
+          // D-4 History
+          const regData = sharedData.registry ? sharedData.registry[plateSearch] : null;
+          const aliasData = sharedData.forgedAliases ? sharedData.forgedAliases[plateSearch] : null;
+          
+          db4.innerHTML = '';
+          
+          if (regData) {
+              const row1 = document.createElement('div'); row1.className = 'data-row'; row1.style.cssText = 'color:var(--warning); font-weight:bold;';
+              const s1 = document.createElement('span'); s1.textContent = 'REGISTRY FOUND'; const s2 = document.createElement('span'); s2.textContent = plateSearch;
+              row1.appendChild(s1); row1.appendChild(s2); db4.appendChild(row1);
+              
+              const row2 = document.createElement('div'); row2.className = 'data-row';
+              const s3 = document.createElement('span'); s3.textContent = 'ID:'; const s4 = document.createElement('span'); s4.style.color = 'var(--success)'; s4.textContent = regData.id;
+              row2.appendChild(s3); row2.appendChild(s4); db4.appendChild(row2);
+              
+              const row3 = document.createElement('div'); row3.className = 'data-row';
+              const s5 = document.createElement('span'); s5.textContent = 'Status:'; const s6 = document.createElement('span'); s6.style.color = regData.status==='WANTED'?'var(--danger)':'var(--success)'; s6.textContent = regData.status;
+              row3.appendChild(s5); row3.appendChild(s6); db4.appendChild(row3);
+
+              if(regData.status === 'WANTED') {
+                  const warn = document.createElement('div'); warn.style.cssText = 'margin-top:10px; padding:8px; border:1px solid var(--danger); color:var(--danger); text-align:center;'; warn.textContent = '⚠ APPLICATION REJECTED - SUBJECT WANTED ⚠';
+                  db4.appendChild(warn);
+              } else if (regData.id === 'MISSING' || regData.id === 'UNVERIFIED') {
+                  const warn = document.createElement('div'); warn.style.cssText = 'margin-top:10px; padding:8px; border:1px solid var(--warning); color:var(--warning); text-align:center;'; warn.textContent = '⚠ APPLICATION PENDING - UNVERIFIED ⚠';
+                  db4.appendChild(warn);
+              }
+          }
+          if (aliasData) {
+              const row = document.createElement('div'); row.className = 'data-row'; row.style.cssText = 'color:var(--danger); font-weight:bold; margin-top:10px;';
+              const s1 = document.createElement('span'); s1.textContent = 'FORGERY FLAG'; const s2 = document.createElement('span'); s2.textContent = 'DETECTED';
+              row.appendChild(s1); row.appendChild(s2); db4.appendChild(row);
+              const warn = document.createElement('div'); warn.style.cssText = 'margin-top:10px; padding:8px; border:1px solid var(--danger); color:var(--danger); text-align:center;'; warn.textContent = '⚠ APPLICATION REJECTED - FORGERY ⚠';
+              db4.appendChild(warn);
+          }
+
           const plateHist = (sharedData.history || []).filter(h => h.plate === plateSearch || h.plate.includes(plateSearch));
-          if (plateHist.length > 0) { historyHTML += `<div style="margin-top:15px; border-top:1px solid #444; padding-top:10px; color:#888;">APPLICATION LOG:</div>`; plateHist.forEach(h => { let statusColor = 'var(--accent)'; let statusText = h.action; if(h.action.includes('ARRESTED') || h.action.includes('REJECTED')) { statusColor = 'var(--danger)'; statusText = 'APPLICATION REJECTED'; } else if(h.action.includes('RELEASED') || h.action.includes('TURNED AWAY')) { statusColor = 'var(--success)'; statusText = 'APPLICATION APPROVED / CLOSED'; } else if(h.action.includes('RENEWED')) { statusColor = 'var(--warning)'; statusText = 'APPLICATION RENEWED'; } historyHTML += `<div class="data-row"><span style="color:#aaa">${h.timestamp||'N/A'}</span><span style="color:${statusColor}; font-weight:bold;">${statusText}</span></div>`; }); }
-          if(!regData && !aliasData && plateHist.length === 0) historyHTML = `<div style="color: #555; text-align:center; margin-top:20px;">NO D-4 RECORDS FOUND FOR ${plateSearch}</div>`; db4.innerHTML = historyHTML;
-          let d5HTML = ''; const isWantedOrForged = (regData && regData.status === 'WANTED') || aliasData; const names = ["JOHN SINGH", "MARIA DIAZ", "ALEX JONES", "SARAH CONNOR", "MICHAEL LEE", "LISA RAY"]; const applicantName = isWantedOrForged ? "CLASSIFIED / REDACTED" : names[Math.floor(Math.random() * names.length)];
+          if (plateHist.length > 0) {
+              const label = document.createElement('div'); label.style.cssText = 'margin-top:15px; border-top:1px solid #444; padding-top:10px; color:#888;'; label.textContent = 'APPLICATION LOG:';
+              db4.appendChild(label);
+              plateHist.forEach(h => {
+                  let statusColor = 'var(--accent)'; let statusText = h.action;
+                  if(h.action.includes('ARRESTED') || h.action.includes('REJECTED')) { statusColor = 'var(--danger)'; statusText = 'APPLICATION REJECTED'; }
+                  else if(h.action.includes('RELEASED') || h.action.includes('TURNED AWAY')) { statusColor = 'var(--success)'; statusText = 'APPLICATION APPROVED / CLOSED'; }
+                  else if(h.action.includes('RENEWED')) { statusColor = 'var(--warning)'; statusText = 'APPLICATION RENEWED'; }
+                  
+                  const row = document.createElement('div'); row.className = 'data-row';
+                  const s1 = document.createElement('span'); s1.style.color = '#aaa'; s1.textContent = h.timestamp||'N/A';
+                  const s2 = document.createElement('span'); s2.style.color = statusColor; s2.style.fontWeight = 'bold'; s2.textContent = statusText;
+                  row.appendChild(s1); row.appendChild(s2); db4.appendChild(row);
+              });
+          }
+          if(!regData && !aliasData && plateHist.length === 0) {
+              const none = document.createElement('div'); none.style.cssText = 'color: #555; text-align:center; margin-top:20px;'; none.textContent = `NO D-4 RECORDS FOUND FOR ${plateSearch}`;
+              db4.appendChild(none);
+          }
+
+          // D-5 Registration Application
+          const isWantedOrForged = (regData && regData.status === 'WANTED') || aliasData;
+          const names = ["JOHN SINGH", "MARIA DIAZ", "ALEX JONES", "SARAH CONNOR", "MICHAEL LEE", "LISA RAY"];
+          const applicantName = isWantedOrForged ? "CLASSIFIED / REDACTED" : names[Math.floor(Math.random() * names.length)];
+          
           let isApproved, testScore;
-          if(car && car.plate === plateSearch) { isApproved = car.d5Status === 'APPROVED'; testScore = car.d5Score; } else { let hash = 0; for (let i = 0; i < plateSearch.length; i++) { hash = ((hash << 5) - hash) + plateSearch.charCodeAt(i); hash = hash & hash; } testScore = Math.abs(hash % 100) + 1; isApproved = testScore >= 70 && !isWantedOrForged; }
+          if(car && car.plate === plateSearch) {
+              isApproved = car.d5Status === 'APPROVED';
+              testScore = car.d5Score;
+          } else {
+              let hash = 0;
+              for (let i = 0; i < plateSearch.length; i++) { hash = ((hash << 5) - hash) + plateSearch.charCodeAt(i); hash = hash & hash; }
+              testScore = Math.abs(hash % 100) + 1;
+              isApproved = testScore >= 70 && !isWantedOrForged;
+          }
+          
           const vehicleClass = "HVM_CLASS_" + (Math.abs(testScore % 3) + 1);
-          if(isWantedOrForged) { d5HTML += `<div style="color:var(--danger); text-align:center; padding:20px; border:1px solid var(--danger);">⚠ ACCESS DENIED: SUBJECT WANTED/FORGED ⚠</div>`; }
-          else { d5HTML += `<div class="d5-app-doc"><h4>OFFICIAL APPLICATION FOR VEHICLE REGISTRATION</h4><div class="d5-row"><span>APPLICANT NAME:</span><span>${applicantName}</span></div><div class="d5-row"><span>VEHICLE CLASS:</span><span>${vehicleClass}</span></div><div class="d5-row"><span>REQUESTED PLATE:</span><span style="color:var(--accent)">${plateSearch}</span></div><div class="d5-row"><span>TEST SCORE:</span><span style="color:${testScore >= 70 ? 'var(--success)' : 'var(--danger)'}">${testScore} / 100</span></div><div class="d5-row"><span>STATUS:</span><span style="color:${isApproved ? 'var(--success)' : 'var(--danger)'}">${isApproved ? 'PASSED' : 'FAILED (Below 70)'}</span></div><div style="margin-top:15px; border-top:1px dashed #888; padding-top:10px; font-size:0.8rem;">${isWantedOrForged ? 'BACKGROUND CHECK: ✗ CRIMINAL RECORD DETECTED' : (testScore >= 70 ? 'BACKGROUND CHECK: ✓ RECORD CLEAN' : 'BACKGROUND CHECK: ✓ RECORD CLEAN <br> VEHICLE INSPECTION: ✗ FAILED (Below 70)')}</div><div class="d5-stamp ${isApproved ? 'approved' : 'rejected'}">${isApproved ? 'APPROVED' : 'REJECTED'}</div></div>`; }
-          db5.innerHTML = d5HTML; document.getElementById('dbLayout').classList.add('active'); playSound('success');
+
+          db5.innerHTML = '';
+          
+          if(isWantedOrForged) {
+              const warn = document.createElement('div'); warn.style.cssText = 'color:var(--danger); text-align:center; padding:20px; border:1px solid var(--danger);'; warn.textContent = '⚠ ACCESS DENIED: SUBJECT WANTED/FORGED ⚠';
+              db5.appendChild(warn);
+          } else {
+              const doc = document.createElement('div'); doc.className = 'd5-app-doc';
+              doc.innerHTML = `
+                  <h4>OFFICIAL APPLICATION FOR VEHICLE REGISTRATION</h4>
+                  <div class="d5-row"><span>APPLICANT NAME:</span><span id="d5Name"></span></div>
+                  <div class="d5-row"><span>VEHICLE CLASS:</span><span id="d5Class"></span></div>
+                  <div class="d5-row"><span>REQUESTED PLATE:</span><span id="d5Plate" style="color:var(--accent)"></span></div>
+                  <div class="d5-row"><span>TEST SCORE:</span><span id="d5Score" style="color:${testScore >= 70 ? 'var(--success)' : 'var(--danger)'}"></span></div>
+                  <div class="d5-row"><span>STATUS:</span><span style="color:${isApproved ? 'var(--success)' : 'var(--danger)'}">${isApproved ? 'PASSED' : 'FAILED (Below 70)'}</span></div>
+                  <div style="margin-top:15px; border-top:1px dashed #888; padding-top:10px; font-size:0.8rem;">
+                      ${isWantedOrForged ? 'BACKGROUND CHECK: ✗ CRIMINAL RECORD DETECTED' : (testScore >= 70 ? 'BACKGROUND CHECK: ✓ RECORD CLEAN' : 'BACKGROUND CHECK: ✓ RECORD CLEAN <br> VEHICLE INSPECTION: ✗ FAILED (Below 70)')}
+                  </div>
+              `;
+              doc.querySelector('#d5Name').textContent = applicantName;
+              doc.querySelector('#d5Class').textContent = vehicleClass;
+              doc.querySelector('#d5Plate').textContent = plateSearch;
+              doc.querySelector('#d5Score').textContent = `${testScore} / 100`;
+              
+              const stamp = document.createElement('div'); stamp.className = `d5-stamp ${isApproved ? 'approved' : 'rejected'}`; stamp.textContent = isApproved ? 'APPROVED' : 'REJECTED';
+              doc.appendChild(stamp);
+              
+              db5.appendChild(doc);
+          }
+          
+          document.getElementById('dbLayout').classList.add('active');
+          playSound('success');
       }, 800);
   }
 
   /* ===== MECHANICAL GATE OVERRIDE ===== */
   function mechanicalGateOverride() {
       if(!car) { addLog("GATE ERROR: No vehicle at gate.", "var(--warning)"); playSound('error'); return; }
-      const p = car.is911Emergency || car.isPatrolDispatch; const w = car.isWanted || car.isForged || car.realWantedPlate;
-      if(w) { addLog("GATE LOCKOUT: Wanted/forged subject. Mechanical override DENIED.", "var(--danger)"); playSound('error'); return; }
-      if(!p) { addLog("GATE LOCKOUT: Standard civilian. Use normal release procedure.", "var(--warning)"); playSound('buzzer'); return; }
-      playSound('gate'); addLog(`⚡ MECHANICAL GATE OVERRIDE: ${car.plate} fast-tracked via D-16 protocol.`, "var(--accent)"); valids++; revenue += 50; rankPoints += 3; history.push({ plate: car.plate, id: car.id, action: "FAST-TRACK RELEASED (D-16)", timestamp: new Date().toLocaleTimeString() }); stopSirenSound(); updateLevel(); saveData(); updateStatusUI(); resetStage();
+      const p = car.is911Emergency || car.isPatrolDispatch;
+      const w = car.isWanted || car.isForged || car.realWantedPlate;
+      if(w) {
+          addLog("GATE LOCKOUT: Wanted/forged subject. Mechanical override DENIED.", "var(--danger)");
+          playSound('error');
+          return;
+      }
+      if(!p) {
+          addLog("GATE LOCKOUT: Standard civilian. Use normal release procedure.", "var(--warning)");
+          playSound('buzzer');
+          return;
+      }
+      // VIP / Emergency
+      playSound('gate');
+      addLog(`⚡ MECHANICAL GATE OVERRIDE: ${car.plate} fast-tracked via D-16 protocol.`, "var(--accent)");
+      valids++;
+      revenue += 50;
+      rankPoints += 3;
+      history.push({ plate: car.plate, id: car.id, action: "FAST-TRACK RELEASED (D-16)", timestamp: new Date().toLocaleTimeString() });
+      stopSirenSound();
+      updateLevel(); saveData(); updateStatusUI(); resetStage();
   }
 
-  /* ===== DRAGGABLES ===== */
-  (function() { const doc = document.getElementById('docOverlay'); let isDragging = false, startX, startY, origX, origY; doc.addEventListener('pointerdown', (e) => { if(e.target.tagName === 'BUTTON') return; isDragging = true; startX = e.clientX; startY = e.clientY; const rect = doc.getBoundingClientRect(); origX = rect.left; origY = rect.top; doc.setPointerCapture(e.pointerId); }); doc.addEventListener('pointermove', (e) => { if(!isDragging) return; const dx = e.clientX - startX; const dy = e.clientY - startY; doc.style.left = (origX + dx) + 'px'; doc.style.top = (origY + dy) + 'px'; doc.style.position = 'fixed'; }); doc.addEventListener('pointerup', () => { isDragging = false; }); doc.addEventListener('pointercancel', () => { isDragging = false; }); })();
-  (function() { const compose = document.getElementById('composeWindow'); const header = document.getElementById('composeHeader'); let isDragging = false, startX, startY, origLeft, origTop; header.addEventListener('pointerdown', (e) => { isDragging = true; startX = e.clientX; startY = e.clientY; const rect = compose.getBoundingClientRect(); origLeft = rect.left; origTop = rect.top; header.setPointerCapture(e.pointerId); }); header.addEventListener('pointermove', (e) => { if(!isDragging) return; const dx = e.clientX - startX; const dy = e.clientY - startY; compose.style.position = 'fixed'; compose.style.left = (origLeft + dx) + 'px'; compose.style.top = (origTop + dy) + 'px'; compose.style.bottom = 'auto'; compose.style.right = 'auto'; }); header.addEventListener('pointerup', () => { isDragging = false; }); header.addEventListener('pointercancel', () => { isDragging = false; }); })();
+  /* ===== DRAGGABLE DOC OVERLAY ===== */
+  (function() {
+      const doc = document.getElementById('docOverlay');
+      let isDragging = false, startX, startY, origX, origY;
+      doc.addEventListener('pointerdown', (e) => {
+          if(e.target.tagName === 'BUTTON') return;
+          isDragging = true;
+          startX = e.clientX; startY = e.clientY;
+          const rect = doc.getBoundingClientRect();
+          origX = rect.left; origY = rect.top;
+          doc.setPointerCapture(e.pointerId);
+      });
+      doc.addEventListener('pointermove', (e) => {
+          if(!isDragging) return;
+          const dx = e.clientX - startX; const dy = e.clientY - startY;
+          doc.style.left = (origX + dx) + 'px';
+          doc.style.top = (origY + dy) + 'px';
+          doc.style.position = 'fixed';
+      });
+      doc.addEventListener('pointerup', () => { isDragging = false; });
+      doc.addEventListener('pointercancel', () => { isDragging = false; });
+  })();
+
+  /* ===== DRAGGABLE COMPOSE WINDOW ===== */
+  (function() {
+      const compose = document.getElementById('composeWindow');
+      const header = document.getElementById('composeHeader');
+      let isDragging = false, startX, startY, origLeft, origTop;
+      header.addEventListener('pointerdown', (e) => {
+          isDragging = true;
+          startX = e.clientX; startY = e.clientY;
+          const rect = compose.getBoundingClientRect();
+          origLeft = rect.left; origTop = rect.top;
+          header.setPointerCapture(e.pointerId);
+      });
+      header.addEventListener('pointermove', (e) => {
+          if(!isDragging) return;
+          const dx = e.clientX - startX; const dy = e.clientY - startY;
+          compose.style.position = 'fixed';
+          compose.style.left = (origLeft + dx) + 'px';
+          compose.style.top = (origTop + dy) + 'px';
+          compose.style.bottom = 'auto';
+          compose.style.right = 'auto';
+      });
+      header.addEventListener('pointerup', () => { isDragging = false; });
+      header.addEventListener('pointercancel', () => { isDragging = false; });
+  })();
 
   /* ===== INIT ===== */
-  loadData(); refreshAPBList(); addLog("ENFORCEMENT TERMINAL v23.2 ONLINE", "var(--accent)"); addLog("Network sync: D1 ↔ D2 active. Safe merge enabled.", "var(--success)"); addLog("Awaiting vehicle inspection...", "#888");
+  loadData();
+  refreshAPBList();
+  addLog("ENFORCEMENT TERMINAL v23.2 ONLINE", "var(--accent)");
+  addLog("Network sync: D1 ↔ D2 active. Safe merge enabled.", "var(--success)");
+  addLog("Awaiting vehicle inspection...", "#888");
 </script>
+
 </body>
 </html>
