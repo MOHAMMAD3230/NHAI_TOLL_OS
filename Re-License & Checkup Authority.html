@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<link rel="icon" href="https://mohammad3230.github.io/PROJECT/favicon.png" type="image/png" sizes="32x32" />
+    <script async src="https://www.googletagmanager.com/gtag/js?id=GT-NC6T5LRJ"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        gtag('config', 'GT-NC6T5LRJ');
+    </script>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>DASHBOARD 17 - RE-LICENSE CHECKUP</title>
+<style>
+    :root { --bg: #05050a; --panel: #111118; --accent: #00f2ff; --success: #00ff9d; --danger: #ff0044; --warning: #ffcc00; }
+    body { background-color: var(--bg); color: #eee; font-family: 'Courier New', monospace; margin: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+    
+    .header { background: #000; padding: 15px 20px; border-bottom: 3px solid var(--accent); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; z-index: 10; }
+    .header h1 { margin: 0; color: var(--accent); letter-spacing: 3px; font-size: 1rem; }
+    .header-btn { background: var(--accent); color: #000; border: none; padding: 8px 15px; font-weight: bold; cursor: pointer; text-transform: uppercase; font-family: monospace; border-radius: 4px; font-size: 0.8rem; }
+    
+    .main-layout { flex: 1; display: flex; flex-direction: column; overflow-y: auto; overflow-x: hidden; }
+    
+    /* Verification & Search Units */
+    .verification-unit { display: flex; gap: 15px; background: #000; padding: 20px; border-bottom: 1px solid #333; flex-wrap: wrap; align-items: center; }
+    .search-unit { display: flex; gap: 15px; background: #050520; padding: 15px; border-bottom: 1px solid var(--warning); flex-wrap: wrap; align-items: stretch; }
+    .input-group { flex: 1; min-width: 150px; display: flex; flex-direction: column; }
+    .input-group label { display: block; font-size: 0.7rem; color: var(--accent); margin-bottom: 8px; }
+    .input-group.search-group label { color: var(--warning); }
+    .input-group input { 
+        width: 100%; background: #111; border: 1px solid #444; color: var(--success); padding: 15px; 
+        box-sizing: border-box; font-size: 1.4rem; font-family: monospace; outline: none;
+    }
+    .input-group.search-group input { border-color: var(--warning); color: var(--warning); }
+    
+    .mech-btn { 
+        background: linear-gradient(180deg, #444 0%, #222 100%); border: 2px solid #000; color: #fff; 
+        padding: 15px; cursor: pointer; text-transform: uppercase; font-size: 0.7rem; font-weight: bold; 
+        box-shadow: 0 4px #000; transition: all 0.15s; font-family: monospace; white-space: nowrap;
+    }
+    .mech-btn:active { transform: translateY(2px); box-shadow: 0 1px #000; }
+    .search-btn { background: linear-gradient(180deg, #554400 0%, #222 100%); color: var(--warning); border-color: var(--warning); width: 100%; height: 100%; min-height: 50px; }
+
+    /* Active Case Area */
+    .case-area { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; background: var(--bg); min-height: 300px; }
+    .queue-box { background: var(--panel); border: 2px solid #333; padding: 30px; width: 100%; max-width: 500px; text-align: center; border-radius: 8px; box-sizing: border-box; }
+    .plate-display { font-size: 2.5rem; font-weight: 900; color: var(--warning); letter-spacing: 5px; margin: 20px 0; text-shadow: 0 0 15px rgba(255,204,0,0.4); word-break: break-all; }
+    .status-text { font-size: 1.2rem; color: #aaa; }
+    .controls { display: flex; gap: 20px; margin-top: 30px; width: 100%; }
+    .case-btn { flex: 1; padding: 20px 10px; border: none; border-radius: 4px; font-weight: 900; text-transform: uppercase; font-size: 1.2rem; font-family: monospace; cursor: pointer; transition: 0.2s; box-shadow: 0 5px #000; }
+    .case-btn:active { transform: translateY(3px); box-shadow: 0 1px #000; }
+    .btn-approve { background: var(--success); color: #000; }
+    .btn-reject { background: var(--danger); color: #fff; }
+    .btn-idle { background: #333; color: #666; cursor: not-allowed; pointer-events: none; box-shadow: none; }
+
+    /* Network DB Layout */
+    .secondary-layout { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg); z-index: 50; display: none; flex-direction: column; border: 2px solid var(--accent); box-sizing: border-box; }
+    .secondary-layout.active { display: flex; }
+    .sec-header { background: #000; padding: 15px; border-bottom: 2px solid var(--accent); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+    .sec-content { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 15px; padding: 15px; overflow-y: auto; }
+    .dboard-card { background: #111; border: 1px solid #333; padding: 15px; border-radius: 4px; display: flex; flex-direction: column; gap: 10px; min-height: 200px; }
+    .dboard-title { font-size: 0.9rem; color: var(--warning); border-bottom: 1px solid #444; padding-bottom: 5px; font-weight: bold; }
+    .dboard-data { flex: 1; font-size: 0.8rem; color: #ccc; overflow-y: auto; background: #000; padding: 10px; }
+    .data-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px dashed #222; }
+
+    .d5-app-doc { background: #f0f0e8; color: #111; padding: 15px; border: 1px solid #888; font-family: 'Courier New', monospace; position: relative; margin-top: 10px; }
+    .d5-app-doc h4 { margin: 0 0 10px 0; text-align: center; border-bottom: 2px solid #111; padding-bottom: 5px; font-size: 0.9rem; }
+    .d5-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 0.85rem; }
+    .d5-row span:last-child { font-weight: bold; }
+    .d5-stamp { position: absolute; bottom: 20px; right: 20px; width: 120px; height: 50px; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; font-weight: 900; transform: rotate(-15deg); border: 4px solid; text-transform: uppercase; opacity: 0.8; }
+    .d5-stamp.approved { color: #008000; border-color: #008000; }
+    .d5-stamp.rejected { color: #cc0000; border-color: #cc0000; }
+
+    /* --- RESPONSIVE DESIGN --- */
+    @media (max-width: 1024px) {
+        .sec-content { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 600px) {
+        body { overflow-y: auto; height: auto; min-height: 100vh; }
+        .main-layout { overflow-y: visible; }
+        
+        .header h1 { font-size: 0.8rem; letter-spacing: 1px; }
+        .header-btn { padding: 8px 10px; font-size: 0.7rem; }
+        
+        .verification-unit, .search-unit { padding: 15px; gap: 10px; }
+        .input-group input { padding: 12px; font-size: 1.2rem; }
+        
+        .case-area { padding: 15px; justify-content: flex-start; min-height: auto; }
+        .queue-box { padding: 20px 15px; }
+        .plate-display { font-size: 1.8rem; letter-spacing: 2px; margin: 15px 0; }
+        .status-text { font-size: 1rem; }
+        .controls { flex-direction: column; gap: 15px; margin-top: 20px; }
+        .case-btn { padding: 15px; font-size: 1rem; }
+        
+        .sec-content { padding: 10px; gap: 10px; }
+        .d5-row { font-size: 0.75rem; }
+    }
+</style>
+</head>
+<body>
+
+<div class="header">
+    <h1>■ DASHBOARD 17: RE-LICENSE AUTHORITY ■</h1>
+    <button class="header-btn" onclick="toggleDBs()">NETWORK DBs</button>
+</div>
+
+<div class="main-layout">
+    <div class="verification-unit">
+        <div class="input-group">
+            <label>Manual Plate Input</label>
+            <input type="text" id="plateIn" placeholder="Type Plate...">
+        </div>
+        <div class="input-group">
+            <label>Manual License Input</label>
+            <input type="text" id="licenseIn" placeholder="Type ID...">
+        </div>
+    </div>
+
+    <div class="search-unit">
+        <div class="input-group search-group" style="flex: 2;">
+            <label>Manual Search Plate (D-4 / D-5 History)</label>
+            <input type="text" id="searchPlateIn" placeholder="Search Plate...">
+        </div>
+        <div class="input-group search-group" style="flex: 1; display: flex; align-items: flex-end;">
+            <button class="mech-btn search-btn" onclick="searchApplicationHistory()">SEARCH HISTORY</button>
+        </div>
+    </div>
+
+    <div class="case-area">
+        <div class="queue-box">
+            <div class="status-text" id="statusText">NO VEHICLES IN QUEUE</div>
+            <div class="plate-display" id="plateDisplay">---</div>
+            <div class="controls">
+                <button class="case-btn btn-idle" id="btnApprove" onclick="processCase('CLEAR')">✓ APPROVE</button>
+                <button class="case-btn btn-idle" id="btnReject" onclick="processCase('REJECTED')">✗ REJECT</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Network DBs Overlay -->
+<div class="secondary-layout" id="dbLayout">
+    <div class="sec-header">
+        <span style="font-weight: bold; color: var(--warning);">■ SYSTEM NETWORK DATABASES</span>
+        <button class="mech-btn" style="padding: 5px 15px; box-shadow: none; background: var(--danger);" onclick="toggleDBs()">CLOSE [X]</button>
+    </div>
+    <div class="sec-content">
+        <div class="dboard-card">
+            <div class="dboard-title">DASHBOARD 4: CITIZEN APPLICATION HISTORY</div>
+            <div class="dboard-data" id="db4Content">Enter Search Plate and click "SEARCH HISTORY".</div>
+        </div>
+        
+        <div class="dboard-card">
+            <div class="dboard-title">DASHBOARD 5: VEHICLE REGISTRATION APPLICATIONS</div>
+            <div class="dboard-data" id="db5Content">Search a plate to view official registration application data.</div>
+        </div>
+
+        <div class="dboard-card" style="grid-column: 1 / -1;">
+            <div class="dboard-title">DASHBOARD 2: ENFORCEMENT LOG</div>
+            <div class="dboard-data" id="db2Content">Loading network logs...</div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const LS_D1_KEY = 'enforcementTerminalV23_D1';
+    const LS_D2_KEY = 'enforcementTerminalV23_TOLL';
+    let sharedData = {};
+    let currentCasePlate = null;
+
+    function log(msg) { console.log("[D17]: " + msg); }
+
+    function loadData() {
+        try {
+            const d1 = localStorage.getItem(LS_D1_KEY);
+            const d2 = localStorage.getItem(LS_D2_KEY);
+            sharedData = { registry: {}, history: [] };
+            
+            if (d1) { 
+                const parsed = JSON.parse(d1); 
+                if (typeof parsed === 'object' && parsed !== null) {
+                    Object.assign(sharedData, parsed); 
+                    if(parsed.registry) Object.assign(sharedData.registry, parsed.registry);
+                }
+            }
+            if (d2) { 
+                const parsed = JSON.parse(d2); 
+                if (typeof parsed === 'object' && parsed !== null) {
+                    Object.assign(sharedData, parsed); 
+                    if(parsed.registry) Object.assign(sharedData.registry, parsed.registry);
+                    
+                    // Safe merge and deduplicate histories
+                    const combinedHistory = (parsed.history || []).concat(sharedData.history || []);
+                    const uniqueMap = new Map();
+                    combinedHistory.forEach(item => {
+                        if (item && item.plate && item.timestamp) {
+                            const key = `${item.plate}_${item.timestamp}`;
+                            if (!uniqueMap.has(key)) {
+                                uniqueMap.set(key, item);
+                            }
+                        }
+                    });
+                    sharedData.history = Array.from(uniqueMap.values());
+                }
+            }
+            
+            // Final failsafe ensuring object structure
+            if(!sharedData.registry || typeof sharedData.registry !== 'object') sharedData.registry = {};
+            if(!sharedData.history || !Array.isArray(sharedData.history)) sharedData.history = [];
+            
+        } catch(e) { 
+            log("Data load error: " + e.message);
+            sharedData = { registry: {}, history: [] }; 
+        }
+    }
+
+    function saveData() {
+        try {
+            // Create a clean snapshot to prevent race condition corruption during JSON conversion
+            const snapshot = {
+                registry: Object.assign({}, sharedData.registry),
+                history: Array.from(sharedData.history)
+            };
+            const d1Str = JSON.stringify(snapshot);
+            localStorage.setItem(LS_D1_KEY, d1Str);
+            localStorage.setItem(LS_D2_KEY, d1Str);
+        } catch(e) {
+            log("Data save error: " + e.message);
+        }
+    }
+
+    function processCase(decision) {
+        if (!currentCasePlate) return;
+        loadData();
+        
+        if (sharedData.registry[currentCasePlate]) {
+            sharedData.registry[currentCasePlate].status = decision;
+            sharedData.registry[currentCasePlate].id = decision === 'CLEAR' ? 'LICENSE_VERIFIED' : 'UNVERIFIED';
+            log(`CASE RESOLVED: ${currentCasePlate} -> ${decision}`);
+            saveData();
+        }
+        
+        currentCasePlate = null;
+        updateUI();
+    }
+
+    function updateUI() {
+        loadData();
+        
+        // Only find cases specifically routed to Dashboard 17
+        const pendingPlate = Object.keys(sharedData.registry).find(p => 
+            sharedData.registry[p] && 
+            sharedData.registry[p].status === 'PENDING_ENFORCEMENT' && 
+            sharedData.registry[p].source === 'D17_RELICENSE'
+        );
+        
+        const plateDiv = document.getElementById('plateDisplay');
+        const statusDiv = document.getElementById('statusText');
+        const btnApprove = document.getElementById('btnApprove');
+        const btnReject = document.getElementById('btnReject');
+
+        if (pendingPlate) {
+            currentCasePlate = pendingPlate;
+            plateDiv.textContent = pendingPlate; // Security: textContent over innerHTML
+            statusDiv.textContent = "AWAITING LICENSE VERIFICATION";
+            statusDiv.style.color = "var(--warning)";
+            btnApprove.className = "case-btn btn-approve";
+            btnReject.className = "case-btn btn-reject";
+            
+            document.getElementById('plateIn').value = pendingPlate;
+            document.getElementById('searchPlateIn').value = pendingPlate;
+        } else {
+            currentCasePlate = null;
+            plateDiv.textContent = "---";
+            statusDiv.textContent = "NO VEHICLES IN QUEUE";
+            statusDiv.style.color = "#aaa";
+            btnApprove.className = "case-btn btn-idle";
+            btnReject.className = "case-btn btn-idle";
+        }
+    }
+
+    function toggleDBs() {
+        document.getElementById('dbLayout').classList.toggle('active');
+        if(document.getElementById('dbLayout').classList.contains('active')) refreshDashboards();
+    }
+
+    function refreshDashboards() {
+        const db2 = document.getElementById('db2Content'); 
+        db2.innerHTML = '';
+        const hist = sharedData.history || [];
+        
+        if(hist.length === 0) {
+            db2.innerHTML = '<div style="color: #555;">No enforcement logs found.</div>';
+        } else {
+            const fragment = document.createDocumentFragment();
+            hist.slice(-20).reverse().forEach(h => {
+                const row = document.createElement('div');
+                row.className = 'data-row';
+                
+                const plateSpan = document.createElement('span');
+                plateSpan.textContent = h.plate || 'N/A';
+                
+                const actionSpan = document.createElement('span');
+                actionSpan.textContent = h.action || 'N/A';
+                actionSpan.style.color = (h.action && h.action.includes('ARRESTED')) ? 'var(--danger)' : 'var(--success)';
+                
+                const timeSpan = document.createElement('span');
+                timeSpan.textContent = h.timestamp || 'N/A';
+                timeSpan.style.color = '#888';
+                
+                row.appendChild(plateSpan);
+                row.appendChild(actionSpan);
+                row.appendChild(timeSpan);
+                fragment.appendChild(row);
+            });
+            db2.appendChild(fragment);
+        }
+    }
+
+    function searchApplicationHistory() {
+        const searchInput = document.getElementById('searchPlateIn');
+        const plateSearch = (searchInput.value || "").toUpperCase().trim();
+        
+        if(!plateSearch) return;
+        
+        const db4 = document.getElementById('db4Content'); 
+        const db5 = document.getElementById('db5Content'); 
+        
+        // Use safe DOM manipulation
+        db4.innerHTML = '';
+        const searchMsg4 = document.createElement('div');
+        searchMsg4.style.color = "var(--accent)";
+        searchMsg4.textContent = "SEARCHING D-4...";
+        db4.appendChild(searchMsg4);
+
+        db5.innerHTML = '';
+        const searchMsg5 = document.createElement('div');
+        searchMsg5.style.color = "var(--accent)";
+        searchMsg5.textContent = "SEARCHING D-5...";
+        db5.appendChild(searchMsg5);
+        
+        setTimeout(() => {
+            db4.innerHTML = '';
+            db5.innerHTML = '';
+            
+            const regData = sharedData.registry[plateSearch]; 
+            const aliasData = sharedData.forgedAliases ? sharedData.forgedAliases[plateSearch] : null;
+            
+            const fragment4 = document.createDocumentFragment();
+
+            if (regData) {
+                const rowHead = document.createElement('div');
+                rowHead.className = 'data-row';
+                rowHead.style.color = 'var(--warning)';
+                rowHead.style.fontWeight = 'bold';
+                rowHead.innerHTML = '<span>REGISTRY FOUND</span>'; // Safe: static string
+                const plateSpan = document.createElement('span');
+                plateSpan.textContent = plateSearch; // Safe: dynamic text
+                rowHead.appendChild(plateSpan);
+                fragment4.appendChild(rowHead);
+
+                const rowId = document.createElement('div');
+                rowId.className = 'data-row';
+                rowId.innerHTML = '<span>ID:</span>';
+                const idSpan = document.createElement('span');
+                idSpan.style.color = 'var(--success)';
+                idSpan.textContent = regData.id || 'N/A';
+                rowId.appendChild(idSpan);
+                fragment4.appendChild(rowId);
+
+                const rowStatus = document.createElement('div');
+                rowStatus.className = 'data-row';
+                rowStatus.innerHTML = '<span>Status:</span>';
+                const statusSpan = document.createElement('span');
+                statusSpan.style.color = regData.status === 'WANTED' ? 'var(--danger)' : 'var(--success)';
+                statusSpan.textContent = regData.status || 'N/A';
+                rowStatus.appendChild(statusSpan);
+                fragment4.appendChild(rowStatus);
+            }
+
+            if (aliasData) {
+                const rowAlias = document.createElement('div');
+                rowAlias.className = 'data-row';
+                rowAlias.style.color = 'var(--danger)';
+                rowAlias.style.fontWeight = 'bold';
+                rowAlias.style.marginTop = '10px';
+                rowAlias.innerHTML = '<span>FORGERY FLAG</span><span>DETECTED</span>'; // Safe: static strings
+                fragment4.appendChild(rowAlias);
+            }
+
+            const plateHist = (sharedData.history || []).filter(h => h.plate === plateSearch);
+            if (plateHist.length > 0) {
+                const logLabel = document.createElement('div');
+                logLabel.style.marginTop = '15px';
+                logLabel.style.borderTop = '1px solid #444';
+                logLabel.style.paddingTop = '10px';
+                logLabel.style.color = '#888';
+                logLabel.textContent = 'APPLICATION LOG:';
+                fragment4.appendChild(logLabel);
+
+                plateHist.forEach(h => {
+                    let statusColor = 'var(--accent)'; 
+                    let statusText = h.action || 'N/A';
+                    if(h.action && (h.action.includes('ARRESTED') || h.action.includes('REJECTED'))) { 
+                        statusColor = 'var(--danger)'; 
+                        statusText = 'APPLICATION REJECTED'; 
+                    } else if(h.action && (h.action.includes('RELEASED') || h.action.includes('TURNED AWAY'))) { 
+                        statusColor = 'var(--success)'; 
+                        statusText = 'APPLICATION APPROVED / CLOSED'; 
+                    }
+                    
+                    const histRow = document.createElement('div');
+                    histRow.className = 'data-row';
+                    
+                    const histTime = document.createElement('span');
+                    histTime.style.color = '#aaa';
+                    histTime.textContent = h.timestamp || 'N/A';
+                    
+                    const histStatus = document.createElement('span');
+                    histStatus.style.color = statusColor;
+                    histStatus.style.fontWeight = 'bold';
+                    histStatus.textContent = statusText;
+                    
+                    histRow.appendChild(histTime);
+                    histRow.appendChild(histStatus);
+                    fragment4.appendChild(histRow);
+                });
+            }
+
+            if(!regData && !aliasData && plateHist.length === 0) {
+                const noRecord = document.createElement('div');
+                noRecord.style.color = '#555';
+                noRecord.style.textAlign = 'center';
+                noRecord.style.marginTop = '20px';
+                noRecord.textContent = `NO D-4 RECORDS FOUND FOR ${plateSearch}`;
+                fragment4.appendChild(noRecord);
+            }
+
+            db4.appendChild(fragment4);
+
+            // Build D-5 Document securely
+            const isWantedOrForged = (regData && regData.status === 'WANTED') || aliasData;
+            let hash = 0;
+            for (let i = 0; i < plateSearch.length; i++) { 
+                hash = ((hash << 5) - hash) + plateSearch.charCodeAt(i); 
+                hash = hash & hash; 
+            }
+            const testScore = Math.abs(hash % 100) + 1; 
+            const isApproved = testScore >= 70 && !isWantedOrForged;
+            const vehicleClass = "HVM_CLASS_" + (Math.abs(testScore % 3) + 1);
+            
+            // Use hash to deterministically pick a name, preventing random changes on every search
+            const names = ["JOHN SINGH", "MARIA DIAZ", "ALEX JONES", "SARAH CONNOR", "MICHAEL LEE", "LISA RAY"];
+            const applicantName = isWantedOrForged ? "CLASSIFIED / REDACTED" : names[Math.abs(hash) % names.length];
+
+            if(isWantedOrForged) {
+                const warningDiv = document.createElement('div');
+                warningDiv.style.color = 'var(--danger)';
+                warningDiv.style.textAlign = 'center';
+                warningDiv.style.padding = '20px';
+                warningDiv.style.border = '1px solid var(--danger)';
+                warningDiv.textContent = '⚠ ACCESS DENIED: SUBJECT WANTED/FORGED ⚠';
+                db5.appendChild(warningDiv);
+            } else {
+                const docContainer = document.createElement('div');
+                docContainer.className = 'd5-app-doc';
+                
+                docContainer.innerHTML = '<h4>OFFICIAL APPLICATION FOR VEHICLE REGISTRATION</h4>'; // Safe: static string
+
+                const fields = [
+                    { label: 'APPLICANT NAME:', value: applicantName },
+                    { label: 'VEHICLE CLASS:', value: vehicleClass },
+                    { label: 'REQUESTED PLATE:', value: plateSearch, valueColor: 'var(--accent)' },
+                    { label: 'TEST SCORE:', value: `${testScore} / 100`, valueColor: testScore >= 70 ? 'var(--success)' : 'var(--danger)' },
+                    { label: 'STATUS:', value: isApproved ? 'PASSED' : 'FAILED (Below 70)', valueColor: isApproved ? 'var(--success)' : 'var(--danger)' }
+                ];
+
+                fields.forEach(field => {
+                    const row = document.createElement('div');
+                    row.className = 'd5-row';
+                    
+                    const labelSpan = document.createElement('span');
+                    labelSpan.textContent = field.label;
+                    
+                    const valueSpan = document.createElement('span');
+                    valueSpan.textContent = field.value;
+                    if(field.valueColor) valueSpan.style.color = field.valueColor;
+                    
+                    row.appendChild(labelSpan);
+                    row.appendChild(valueSpan);
+                    docContainer.appendChild(row);
+                });
+
+                const stamp = document.createElement('div');
+                stamp.className = `d5-stamp ${isApproved ? 'approved' : 'rejected'}`;
+                stamp.textContent = isApproved ? 'APPROVED' : 'REJECTED';
+                docContainer.appendChild(stamp);
+
+                db5.appendChild(docContainer);
+            }
+
+            document.getElementById('dbLayout').classList.add('active'); 
+        }, 800);
+    }
+
+    // Poll for updates every 2 seconds
+    setInterval(updateUI, 2000);
+    updateUI();
+</script>
+</body>
+</html>
