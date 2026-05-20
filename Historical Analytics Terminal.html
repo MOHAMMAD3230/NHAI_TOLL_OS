@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<link rel="icon" href="https://mohammad3230.github.io/PROJECT/favicon.png" type="image/png" sizes="32x32" />
+<script async src="https://www.googletagmanager.com/gtag/js?id=GT-NC6T5LRJ"></script>
+<script>
+window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','GT-NC6T5LRJ');
+</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NHAI - Historical Analytics Terminal</title>
+<style>
+:root{--bg:#050508;--panel:#0a0a12;--accent:#00d9ff;--success:#2ed573;--danger:#ff0044;--warning:#ffa502;--border:#1a1a2e;}
+body{background:var(--bg);color:#ccc;font-family:'Courier New',monospace;margin:0;height:100vh;display:flex;flex-direction:column;overflow:hidden;}
+.top-bar{background:#000;padding:15px 20px;border-bottom:2px solid var(--accent);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;}
+.top-bar h1{margin:0;font-size:.9rem;color:var(--accent);letter-spacing:1px;}
+.top-bar .time{color:var(--warning);font-size:.8rem;}
+.main-layout{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:15px;padding:15px;flex-grow:1;min-height:0;overflow:hidden;}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:15px;display:flex;flex-direction:column;overflow:hidden;}
+.panel-title{color:var(--accent);font-size:.8rem;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;border-bottom:1px solid var(--border);padding-bottom:8px;flex-shrink:0;}
+.chart-area{flex-grow:1;display:flex;align-items:flex-end;gap:6px;padding:10px 0;min-height:0;}
+.bar-col{display:flex;flex-direction:column;align-items:center;flex:1;gap:4px;}
+.bar{width:100%;border-radius:3px 3px 0 0;transition:height .5s ease-out;min-height:2px;}
+.bar-label{font-size:.55rem;color:#555;text-align:center;word-break:break-all;}
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;flex-shrink:0;}
+.stat-card{background:#000;border:1px solid var(--border);padding:12px;border-radius:4px;text-align:center;}
+.stat-num{font-size:1.5rem;font-weight:900;margin-bottom:3px;}
+.stat-label{font-size:.65rem;color:#888;text-transform:uppercase;}
+.table-area{flex-grow:1;overflow-y:auto;min-height:0;font-size:.75rem;}
+.table-area::-webkit-scrollbar{width:6px;}
+.table-area::-webkit-scrollbar-track{background:#000;}
+.table-area::-webkit-scrollbar-thumb{background:var(--accent);}
+.table-row{display:grid;grid-template-columns:2fr 1.5fr 1fr 1fr;gap:5px;padding:8px 0;border-bottom:1px dashed var(--border);}
+.table-header{color:var(--accent);font-weight:bold;border-bottom:1px solid var(--border);}
+.recidivist{color:var(--danger);font-weight:bold;}
+@media(max-width:1024px){.main-layout{grid-template-columns:1fr;grid-template-rows:auto;overflow-y:auto;}.panel{min-height:250px;}}
+@media(max-width:600px){.stat-grid{grid-template-columns:1fr;}.table-row{grid-template-columns:1.5fr 1fr 1fr;}.table-row div:nth-child(2){display:none;}}
+</style>
+</head>
+<body>
+<div class="top-bar">
+<h1>▸ NHAI_ANALYTICS // HISTORICAL_TERMINAL_v12.0</h1>
+<div class="time" id="clock">00:00:00</div>
+</div>
+<div class="main-layout">
+<div class="panel">
+<div class="panel-title">■ Action Distribution (Last 20 Events)</div>
+<div class="chart-area" id="action-chart"></div>
+</div>
+<div class="panel">
+<div class="panel-title">■ Revenue Breakdown</div>
+<div class="chart-area" id="revenue-chart"></div>
+<div class="stat-grid" style="margin-top:10px;">
+<div class="stat-card"><div class="stat-num" style="color:var(--success)" id="s-toll">$0</div><div class="stat-label">Toll/License Rev</div></div>
+<div class="stat-card"><div class="stat-num" style="color:var(--danger)" id="s-bounty">$0</div><div class="stat-label">Bounty/ID Rev</div></div>
+<div class="stat-card"><div class="stat-num" style="color:var(--warning)" id="s-penalty">$0</div><div class="stat-label">Parole/Rehab Rev</div></div>
+<div class="stat-card"><div class="stat-num" style="color:var(--accent)" id="s-cashout">$0</div><div class="stat-label">Total Cashed Out</div></div>
+</div>
+</div>
+<div class="panel">
+<div class="panel-title">■ Key Metrics</div>
+<div class="stat-grid">
+<div class="stat-card"><div class="stat-num" style="color:var(--danger)" id="s-arrests">0</div><div class="stat-label">Total Arrests</div></div>
+<div class="stat-card"><div class="stat-num" style="color:var(--success)" id="s-releases">0</div><div class="stat-label">Total Releases</div></div>
+<div class="stat-card"><div class="stat-num" style="color:var(--warning)" id="s-accuracy">0%</div><div class="stat-label">Accuracy Rate</div></div>
+<div class="stat-card"><div class="stat-num" style="color:var(--accent)" id="s-recidivism">0%</div><div class="stat-label">Recidivism Rate</div></div>
+</div>
+</div>
+<div class="panel">
+<div class="panel-title">■ Recidivism Tracker</div>
+<div class="table-area" id="recidivism-table">
+<div class="table-row table-header"><div>PLATE</div><div>FIRST ACTION</div><div>LATEST</div><div>COUNT</div></div>
+</div>
+</div>
+</div>
+<script>
+let sharedData = { 
+    revenue: 0, valids: 0, missed: 0, level: 1, rankPoints: 0, 
+    history: [], registry: {}, forgedAliases: {}, nextSpawnOverride: null,
+    activeInmates: [], releasedInmates: [], inbox: [], sentMail: [], call911Logs: [],
+    ledgerCashouts: [], intelFlags: [], paroleRecords: [], iaViolations: [], rehabPrograms: []
+};
+
+function updateClock(){document.getElementById('clock').innerText=new Date().toLocaleTimeString('en-GB');}
+setInterval(updateClock,1000);
+
+const HASH_SALT = "ENFORCE_V23_SECURE_SALT";
+function generateSignature(dataStr) {
+    if (typeof dataStr !== 'string') return '0';
+    // Stronger 32-bit unsigned hash to prevent negative values and reduce collisions
+    let hash = 5381;
+    const str = HASH_SALT + dataStr;
+    for (let i = 0; i < str.length; i++) {
+        hash = ((hash << 5) + hash) + str.charCodeAt(i);
+        hash = hash & 0xFFFFFFFF; // Convert to 32bit unsigned integer
+    }
+    return hash.toString(16);
+}
+
+function loadData(){
+    const savedData = localStorage.getItem('enforcementTerminalV23');
+    const savedSig = localStorage.getItem('enforcementTerminalV23_sig');
+    
+    if(savedData){
+        try {
+            if(typeof savedData === 'string' && savedSig !== generateSignature(savedData)){
+                console.error("ANALYTICS BREACH: Data tampering detected! Wiping corrupted data.");
+                localStorage.removeItem('enforcementTerminalV23');
+                localStorage.removeItem('enforcementTerminalV23_sig');
+                // Stop infinite wipe loops by falling back to default data and stopping interval
+                sharedData = { 
+                    revenue: 0, valids: 0, missed: 0, level: 1, rankPoints: 0, 
+                    history: [], registry: {}, forgedAliases: {}, nextSpawnOverride: null,
+                    activeInmates: [], releasedInmates: [], inbox: [], sentMail: [], call911Logs: [],
+                    ledgerCashouts: [], intelFlags: [], paroleRecords: [], iaViolations: [], rehabPrograms: []
+                };
+                renderDashboard();
+                clearInterval(window._syncInterval); // Abort sync loop on breach
+                return;
+            }
+            
+            const p = JSON.parse(savedData);
+            sharedData = p;
+            
+            // Safe property fallback mapping
+            const defaults = {
+                history: [], ledgerCashouts: [], releasedInmates: [], registry: {},
+                forgedAliases: {}, activeInmates: [], inbox: [], sentMail: [],
+                call911Logs: [], intelFlags: [], paroleRecords: [], iaViolations: [], rehabPrograms: []
+            };
+            
+            for (const [key, val] of Object.entries(defaults)) {
+                if (!sharedData[key]) sharedData[key] = val;
+            }
+        } catch(e) {
+            console.error("Load error:", e);
+        }
+    }
+    renderDashboard();
+}
+
+function getActionRevenue(action) {
+    if (!action) return 0; // Prevent fatal errors on undefined history items
+    if (action === 'ARRESTED' || action.includes('ARREST STAMPED')) return 200;
+    if (action === 'ID RENEWED') return 150;
+    if (action === 'RELEASED' || action === 'LICENSE APPROVED') return 50;
+    if (action === 'REHAB GRADUATED') return 100;
+    if (action === 'PAROLE GRANTED' || action.includes('PAROLE / RELEASED')) return 50;
+    if (action.includes('TOLL PAID')) return 500;
+    if (action.includes('ROGUE TOLL')) return 1000;
+    return 0;
+}
+
+function renderDashboard(){
+    const hist=sharedData.history||[];
+    
+    const arrests=hist.filter(h=>h.action==='ARRESTED'||h.action?.includes('ARREST STAMPED')).length;
+    const releases=hist.filter(h=>h.action==='RELEASED'||h.action?.includes('PAROLE / RELEASED')).length;
+    const total=arrests+releases;
+    const accuracy=total>0?Math.round((sharedData.valids/((sharedData.valids+sharedData.missed)||1))*100):0;
+    
+    document.getElementById('s-arrests').innerText=arrests;
+    document.getElementById('s-releases').innerText=releases;
+    document.getElementById('s-accuracy').innerText=accuracy+'%';
+    
+    let tollRev = 0, bountyRev = 0, penaltyRev = 0;
+    hist.forEach(h => {
+        const rev = getActionRevenue(h.action);
+        // Fixed operator precedence and safe optional chaining
+        if (h.action === 'ARRESTED' || h.action?.includes('ARREST STAMPED') || h.action === 'ID RENEWED') {
+            bountyRev += rev;
+        } else if (h.action?.includes('TOLL') || h.action === 'LICENSE APPROVED') {
+            tollRev += rev;
+        } else if (h.action === 'REHAB GRADUATED' || h.action === 'PAROLE GRANTED' || h.action?.includes('PAROLE / RELEASED')) {
+            penaltyRev += rev;
+        }
+    });
+
+    const cashoutTotal=(sharedData.ledgerCashouts||[]).reduce((s,c)=>s+c.totalCashOut,0);
+    
+    document.getElementById('s-toll').innerText='$'+tollRev;
+    document.getElementById('s-bounty').innerText='$'+bountyRev;
+    document.getElementById('s-penalty').innerText='$'+penaltyRev;
+    document.getElementById('s-cashout').innerText='$'+cashoutTotal;
+    
+    renderActionChart(hist);
+    renderRevenueChart(hist);
+    renderRecidivism(hist);
+}
+
+function renderActionChart(hist){
+    const c=document.getElementById('action-chart');c.innerHTML='';
+    const last20=hist.slice(-20);
+    if(last20.length===0){c.innerHTML='<div style="color:#555;text-align:center;width:100%;align-self:center;">NO DATA</div>';return;}
+    last20.forEach(h=>{
+        const col=document.createElement('div');col.className='bar-col';
+        const bar=document.createElement('div');bar.className='bar';
+        let h_pct=20,color='#333';
+        if(h.action==='ARRESTED'||h.action?.includes('ARREST STAMPED')){h_pct=90;color='var(--danger)';}
+        else if(h.action==='RELEASED'){h_pct=40;color='var(--success)';}
+        else if(h.action?.includes('TOLL')){h_pct=60;color='var(--warning)';}
+        else if(h.action?.includes('PATROL')){h_pct=70;color='#ff6b81';}
+        else if(h.action?.includes('INTERCEPT')){h_pct=80;color='var(--accent)';}
+        else if(h.action?.includes('PAROLE')){h_pct=50;color='var(--success)';}
+        else if(h.action?.includes('REHAB')){h_pct=55;color='var(--accent)';}
+        else if(h.action==='LICENSE APPROVED'){h_pct=45;color='var(--success)';}
+        else if(h.action==='LICENSE REJECTED'){h_pct=65;color='var(--danger)';}
+        bar.style.height=h_pct+'%';bar.style.background=color;
+        const lbl=document.createElement('div');lbl.className='bar-label';lbl.innerText=h.plate?h.plate.substring(0,4):'SYS';
+        col.appendChild(bar);col.appendChild(lbl);c.appendChild(col);
+    });
+}
+
+function renderRevenueChart(hist){
+    const c=document.getElementById('revenue-chart');c.innerHTML='';
+    const last10=hist.slice(-10);
+    if(last10.length===0){c.innerHTML='<div style="color:#555;text-align:center;width:100%;align-self:center;">NO DATA</div>';return;}
+    
+    let maxRev = 0;
+    last10.forEach(h => { 
+        const r = getActionRevenue(h.action); 
+        if(r > maxRev) maxRev = r; 
+    });
+    if (maxRev === 0) maxRev = 1;
+
+    last10.forEach(h=>{
+        const col=document.createElement('div');col.className='bar-col';
+        const bar=document.createElement('div');bar.className='bar';
+        let color='#333';
+        const rev = getActionRevenue(h.action);
+
+        if(h.action==='ARRESTED'||h.action?.includes('ARREST STAMPED')){color='var(--danger)';}
+        else if(h.action==='RELEASED'||h.action==='LICENSE APPROVED'){color='var(--success)';}
+        else if(h.action?.includes('TOLL')){color='var(--warning)';}
+        else if(h.action?.includes('REHAB')||h.action==='ID RENEWED'){color='var(--accent)';}
+        
+        const h_pct = Math.max(5, (rev / maxRev) * 100); // Scale dynamically, min 5% for visibility
+        bar.style.height=h_pct+'%';bar.style.background=color;
+        const lbl=document.createElement('div');lbl.className='bar-label';lbl.innerText='$'+rev;
+        col.appendChild(bar);col.appendChild(lbl);c.appendChild(col);
+    });
+}
+
+function renderRecidivism(hist){
+    const table=document.getElementById('recidivism-table');
+    table.innerHTML='<div class="table-row table-header"><div>PLATE</div><div>FIRST ACTION</div><div>LATEST</div><div>COUNT</div></div>';
+    const plateMap={};
+    hist.forEach(h=>{
+        if(h.plate&&h.plate!=='UNKNOWN'&&!h.plate.startsWith('HOLD-')){
+            if(!plateMap[h.plate])plateMap[h.plate]=[];
+            plateMap[h.plate].push(h.action || 'UNKNOWN');
+        }
+    });
+    
+    let recidivismCount=0;
+    const totalPlates=Object.keys(plateMap).length;
+    
+    Object.entries(plateMap).forEach(([plate,actions])=>{
+        const wasArrested = actions.some(a => a?.includes('ARRESTED') || a?.includes('ARREST STAMPED'));
+        const wasReleased = actions.some(a => a?.includes('RELEASED') || a?.includes('PAROLE'));
+        
+        if(actions.length>1 && wasArrested && wasReleased){
+            recidivismCount++;
+            
+            // SECURITY FIX: Safe DOM creation prevents XSS from tainted plate strings
+            const row = document.createElement('div');
+            row.className = 'table-row';
+            
+            const c1 = document.createElement('div');
+            c1.className = 'recidivist';
+            c1.textContent = plate; 
+            
+            const c2 = document.createElement('div');
+            c2.textContent = actions[0];
+            
+            const c3 = document.createElement('div');
+            c3.textContent = actions[actions.length-1];
+            
+            const c4 = document.createElement('div');
+            c4.className = 'recidivist';
+            c4.textContent = actions.length + 'x';
+            
+            row.appendChild(c1);
+            row.appendChild(c2);
+            row.appendChild(c3);
+            row.appendChild(c4);
+            table.appendChild(row);
+        }
+    });
+    
+    const rate=totalPlates>0?Math.round((recidivismCount/totalPlates)*100):0;
+    document.getElementById('s-recidivism').innerText=rate+'%';
+}
+
+loadData();
+// Store interval reference to prevent infinite loops/stacking
+window._syncInterval = setInterval(loadData, 2000); 
+</script>
+</body>
+</html>
