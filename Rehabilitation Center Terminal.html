@@ -35,11 +35,12 @@ body{background:var(--bg);color:#ccc;font-family:'Courier New',monospace;margin:
 .mech-btn:disabled{opacity:.3;cursor:not-allowed;}
 .btn-enroll{background:var(--accent);color:#000;}
 .btn-graduate{background:var(--success);color:#000;}
+.btn-purge{background:var(--danger);color:#fff;box-shadow:0 3px 0 #800022;margin-top:10px;width:100%;}
 .log-box{flex:1;background:#000;border:1px solid #222;padding:10px;font-size:.7rem;color:var(--accent);overflow-y:auto;border-radius:4px;min-height:0;}
 .rehab-list::-webkit-scrollbar,.log-box::-webkit-scrollbar{width:6px;}
 .rehab-list::-webkit-scrollbar-track,.log-box::-webkit-scrollbar-track{background:#000;border:1px solid var(--border);}
 .rehab-list::-webkit-scrollbar-thumb,.log-box::-webkit-scrollbar-thumb{background:var(--accent);}
-.graduated-item{background:#000;border:1px solid var(--border);padding:12px;margin-bottom:8px;border-left:4px solid var(--success);border-radius:4px;opacity:0.6;}
+.graduated-item{background:#000;border:1px solid var(--border);padding:12px;margin-bottom:8px;border-left:4px solid var(--success);border-radius:4px;opacity:0.85;}
 .graduated-badge{display:inline-block;padding:2px 8px;border-radius:3px;font-size:.6rem;font-weight:bold;background:rgba(46,213,115,.15);color:var(--success);border:1px solid var(--success);}
 @media(max-width:1024px){.main-layout{grid-template-columns:1fr;overflow-y:auto;}}
 @media(max-width:600px){.top-bar h1{font-size:.7rem;}.rehab-item{padding:10px;}.mech-btn{font-size:.6rem;padding:8px 10px;}}
@@ -47,7 +48,7 @@ body{background:var(--bg);color:#ccc;font-family:'Courier New',monospace;margin:
 </head>
 <body>
 <div class="top-bar">
-<h1>▸ NHAI_REHAB // CENTER_TERMINAL_v15.0</h1>
+<h1>▸ NHAI_REHAB // CENTER_TERMINAL_v15.1</h1>
 <div class="time" id="clock">00:00:00</div>
 </div>
 <div class="main-layout">
@@ -58,115 +59,132 @@ body{background:var(--bg);color:#ccc;font-family:'Courier New',monospace;margin:
 <div class="stat-box"><div class="stat-num" style="color:var(--success)" id="stat-graduated">0</div><div class="stat-label">Graduated</div></div>
 <div class="stat-box"><div class="stat-num" style="color:var(--warning)" id="stat-awaiting">0</div><div class="stat-label">Awaiting</div></div>
 </div>
-<div class="rehab-list" id="rehab-list"><div style="color:#555;text-align:center;padding:40px;">NO INMATES IN REHAB</div></div>
+<div class="rehab-list" id="rehab-list"><div style="color:#555;text-align:center;padding:40px;">NO INMATES IN REHABILITATION</div></div>
 </div>
 <div class="panel">
 <div class="panel-title">■ Processing Log</div>
 <div class="log-box" id="rehab-log"></div>
-<button class="mech-btn btn-enroll" onclick="enrollFromReleased()" style="margin-top:15px;">ENROLL RELEASED INMATES</button>
+<button class="mech-btn btn-enroll" onclick="enrollFromReleased()" style="margin-top:15px;width:100%;">ENROLL RELEASED INMATES</button>
+<button class="mech-btn btn-purge" onclick="purgeCorruptData()">⚠ PURGE CORRUPTED REHAB DATA</button>
 </div>
 </div>
 <script>
-const LS_MASTER_KEY = 'enforcementTerminalV23_D1'; // Universal Sync Key
-
-let isSaving = false; // Lock flag to prevent sync race conditions
+const LS_MASTER_KEY = 'enforcementTerminalV23_D1';
 
 let sharedData = { 
     revenue: 0, valids: 0, missed: 0, level: 1, rankPoints: 0, 
     history: [], registry: {}, forgedAliases: {}, nextSpawnOverride: null,
     activeInmates: [], releasedInmates: [], inbox: [], sentMail: [], call911Logs: [],
     ledgerCashouts: [], intelFlags: [], paroleRecords: [], iaViolations: [], rehabPrograms: [],
-    rehabLogs: [] // Dedicated array to fix log sync issues and prevent bloat
+    rehabGraduations: []
 };
 
 function updateClock(){document.getElementById('clock').innerText=new Date().toLocaleTimeString('en-GB');}
 setInterval(updateClock,1000);
 
-// Secure Deep Merge (Fixed prototype pollution & corrupted data crashes)
 function deepMerge(target, source) {
     for (const key in source) {
-        if (source.hasOwnProperty(key)) { 
-            const sourceVal = source[key];
-            const targetVal = target[key];
-            
-            if (sourceVal instanceof Array) {
-                target[key] = sourceVal;
-            } else if (sourceVal instanceof Object && targetVal instanceof Object) {
-                deepMerge(targetVal, sourceVal);
-            } else {
-                target[key] = sourceVal;
-            }
+        if (source[key] instanceof Array) {
+            target[key] = source[key];
+        } else if (source[key] instanceof Object && target[key] instanceof Object) {
+            deepMerge(target[key], source[key]);
+        } else {
+            target[key] = source[key];
         }
     }
     return target;
 }
 
-function loadData(){
-    // Wait for any save operations to finish to prevent sync race conditions
-    if (isSaving) return; 
+function ensureDataStructure() {
+    const defaults = {
+        revenue: 0, valids: 0, missed: 0, level: 1, rankPoints: 0, 
+        history: [], registry: {}, forgedAliases: {}, nextSpawnOverride: null,
+        activeInmates: [], releasedInmates: [], inbox: [], sentMail: [], call911Logs: [],
+        ledgerCashouts: [], intelFlags: [], paroleRecords: [], iaViolations: [], rehabPrograms: [],
+        rehabGraduations: []
+    };
+    for (const key in defaults) {
+        if (sharedData[key] === undefined || sharedData[key] === null) {
+            sharedData[key] = defaults[key];
+        }
+    }
+}
 
+function loadData(){
     const savedStr = localStorage.getItem(LS_MASTER_KEY);
     if(savedStr){
-        try{
+        try {
             const p = JSON.parse(savedStr);
-            deepMerge(sharedData, p); 
-            
-            // Array & Object Safety Checks
-            if(!Array.isArray(sharedData.releasedInmates)) sharedData.releasedInmates=[];
-            if(!Array.isArray(sharedData.rehabPrograms)) sharedData.rehabPrograms=[];
-            if(!Array.isArray(sharedData.rehabLogs)) sharedData.rehabLogs=[];
-            if(!Array.isArray(sharedData.activeInmates)) sharedData.activeInmates=[];
-            if(!Array.isArray(sharedData.inbox)) sharedData.inbox=[];
-            if(!Array.isArray(sharedData.sentMail)) sharedData.sentMail=[];
-            if(!Array.isArray(sharedData.call911Logs)) sharedData.call911Logs=[];
-            if(!Array.isArray(sharedData.ledgerCashouts)) sharedData.ledgerCashouts=[];
-            if(!Array.isArray(sharedData.intelFlags)) sharedData.intelFlags=[];
-            if(!Array.isArray(sharedData.paroleRecords)) sharedData.paroleRecords=[];
-            if(!Array.isArray(sharedData.iaViolations)) sharedData.iaViolations=[];
-            if(!Array.isArray(sharedData.history)) sharedData.history=[];
-            
-            if(typeof sharedData.registry !== 'object' || Array.isArray(sharedData.registry)) sharedData.registry={};
-            if(typeof sharedData.forgedAliases !== 'object' || Array.isArray(sharedData.forgedAliases)) sharedData.forgedAliases={};
-            if(sharedData.nextSpawnOverride===undefined) sharedData.nextSpawnOverride=null;
-        }catch(e){
+            deepMerge(sharedData, p);
+            ensureDataStructure();
+        } catch(e) {
             console.error("Load error:", e);
         }
     }
+    
+    // Auto-repair broken types on load
+    let needsSave = false;
+    (sharedData.rehabPrograms || []).forEach(p => {
+        let prog = parseInt(p.progress);
+        let days = parseInt(p.programDays);
+        
+        if (isNaN(prog) || prog < 0) { prog = 0; needsSave = true; }
+        if (isNaN(days) || days <= 0) { days = 15; needsSave = true; }
+        
+        if (p.progress !== prog || p.programDays !== days) {
+            p.progress = prog;
+            p.programDays = days;
+            needsSave = true;
+        }
+    });
+
+    if (needsSave) {
+        saveData();
+    }
+
     renderDashboard();
     renderLogs();
 }
 
 function saveData(){
-    isSaving = true;
-    try {
-        localStorage.setItem(LS_MASTER_KEY, JSON.stringify(sharedData));
-    } catch(e) {
-        console.error("Save error:", e);
-    } finally {
-        isSaving = false;
+    localStorage.setItem(LS_MASTER_KEY, JSON.stringify(sharedData));
+}
+
+function syncData() {
+    const savedStr = localStorage.getItem(LS_MASTER_KEY);
+    if (savedStr) {
+        try {
+            const p = JSON.parse(savedStr);
+            deepMerge(sharedData, p);
+            ensureDataStructure();
+        } catch(e) {}
     }
+    renderDashboard();
 }
 
 function addLog(msg, color){
-    const logEntry = {
+    const logBox = document.getElementById('rehab-log');
+    const e = document.createElement('div');
+    e.style.color = color || 'var(--accent)';
+    e.style.marginBottom = '5px';
+    e.innerText = '> ' + msg;
+    logBox.prepend(e);
+
+    sharedData.iaViolations.push({
+        plate: "REHAB_CENTER",
+        type: "LOG",
         message: msg,
-        color: color || 'var(--accent)',
-        time: new Date().toLocaleTimeString()
-    };
-    
-    sharedData.rehabLogs.push(logEntry);
-    // Keep log size manageable to prevent exceeding localStorage limits
-    if(sharedData.rehabLogs.length > 100) sharedData.rehabLogs.shift(); 
-    
+        color: color,
+        time: new Date().toLocaleTimeString(),
+        status: "LOGGED"
+    });
     saveData();
-    renderLogs();
 }
 
 function renderLogs(){
     const l = document.getElementById('rehab-log');
     l.innerHTML = '';
-    const logs = (sharedData.rehabLogs || []).slice(-30).reverse();
-    
+    const logs = sharedData.iaViolations.filter(f => f.plate === 'REHAB_CENTER' && f.type === 'LOG').slice(-30).reverse();
     if(logs.length === 0){
         l.innerHTML = '<div style="color:#555;">No processing logs recorded yet.</div>';
     } else {
@@ -174,53 +192,76 @@ function renderLogs(){
             const e = document.createElement('div');
             e.style.color = log.color || 'var(--accent)';
             e.style.marginBottom = '5px';
-            e.textContent = '> ' + log.message; // textContent prevents XSS
+            e.innerText = '> ' + log.message;
             l.appendChild(e);
         });
     }
 }
 
 function enrollFromReleased(){
-    const released = sharedData.releasedInmates.filter(i=>
-        (i.status==='RELEASED'||i.status==='PAROLED') && i.status!=='GRADUATED'
+    const graduatedPlates = new Set((sharedData.rehabGraduations || []).map(g => g.oldPlate));
+    
+    const released = sharedData.releasedInmates.filter(i =>
+        (i.status==='RELEASED' || i.status==='PAROLED') && 
+        !graduatedPlates.has(i.plate)
     );
     
     let enrolled = 0;
     released.forEach(inmate => {
         const already = sharedData.rehabPrograms.find(r => r.plate === inmate.plate);
         if(!already){
+            const validRealPlate = (inmate.realPlate && inmate.realPlate !== 'N/A' && inmate.realPlate !== inmate.plate) 
+                ? inmate.realPlate 
+                : 'TEMP-' + Math.floor(1000 + Math.random() * 9000);
+                
+            const validId = (inmate.id && inmate.id !== 'MISSING' && inmate.id !== 'ARREST_TARGET' && inmate.id !== 'WANTED') 
+                ? inmate.id 
+                : 'DL-REHAB-' + Math.floor(1000 + Math.random() * 9000);
+
             sharedData.rehabPrograms.push({
                 plate: inmate.plate,
-                realPlate: inmate.realPlate || inmate.plate,
-                id: inmate.id || 'MISSING',
-                offense: inmate.offense || 'UNKNOWN',
+                realPlate: validRealPlate,
+                id: validId,
+                offense: inmate.offense || 'PENDING REVIEW',
                 progress: 0,
-                programDays: 15 + Math.floor(Math.random()*16),
+                programDays: 15 + Math.floor(Math.random() * 16),
                 status: 'ENROLLED',
                 dateEnrolled: new Date().toLocaleDateString()
             });
             enrolled++;
         }
     });
-    
     if(enrolled > 0){
         saveData();
         renderDashboard();
-        addLog(`ENROLLED: ${enrolled} released inmates into rehabilitation.`,'var(--accent)');
+        addLog(`ENROLLED: ${enrolled} released inmates into rehabilitation.`, 'var(--accent)');
     } else {
-        addLog('No new released inmates to enroll.','var(--warning)');
+        addLog('No new released inmates to enroll.', 'var(--warning)');
     }
 }
 
-function graduateInmate(index){
+function purgeCorruptData() {
+    if(confirm("⚠ WARNING: This will delete all current rehabilitation programs, clearing stuck/corrupted inmates. Proceed?")) {
+        sharedData.rehabPrograms = [];
+        saveData();
+        renderDashboard();
+        addLog('SYSTEM: Corrupted rehabilitation data purged.', 'var(--danger)');
+    }
+}
+
+function graduateInmate(plate){
     const prog = sharedData.rehabPrograms;
-    if(index < 0 || index >= prog.length) return;
-    
+    const index = prog.findIndex(p => p.plate === plate);
+    if(index === -1) return;
+
     const inmate = prog[index];
-    if(inmate.progress < inmate.programDays) return;
+    const safeProgress = parseInt(inmate.progress) || 0;
+    const safeProgramDays = parseInt(inmate.programDays) || 15;
     
-    const newPlate = 'RH-' + Math.floor(1000 + Math.random()*9000);
-    const newId = 'DL-REHAB-' + Math.floor(1000 + Math.random()*9000);
+    if(safeProgress < safeProgramDays) return;
+    
+    const newPlate = 'RH-' + Math.floor(1000 + Math.random() * 9000);
+    const newId = 'DL-REHAB-' + Math.floor(1000 + Math.random() * 9000);
     
     sharedData.registry[newPlate] = {
         id: newId,
@@ -229,13 +270,12 @@ function graduateInmate(index){
         registeredBy: 'REHAB_CENTER'
     };
     
-    const releasedRecord = sharedData.releasedInmates.find(r => r.plate === inmate.plate);
-    if(releasedRecord){
-        releasedRecord.status = 'GRADUATED';
-        releasedRecord.graduatedPlate = newPlate;
-        releasedRecord.graduatedId = newId;
-        releasedRecord.dateGraduated = new Date().toLocaleDateString();
-    }
+    sharedData.rehabGraduations.push({
+        oldPlate: inmate.plate,
+        newPlate: newPlate,
+        newId: newId,
+        dateGraduated: new Date().toLocaleDateString()
+    });
     
     sharedData.history.push({
         plate: newPlate,
@@ -247,17 +287,19 @@ function graduateInmate(index){
     prog.splice(index, 1);
     saveData();
     renderDashboard();
-    addLog(`GRADUATED: ${inmate.plate} → ${newPlate} (${newId}). Reintegrated as CLEAR citizen.`,'var(--success)');
+    addLog(`GRADUATED: ${inmate.plate} → ${newPlate} (${newId}). Reintegrated as CLEAR citizen.`, 'var(--success)');
 }
 
 function renderDashboard(){
     const programs = sharedData.rehabPrograms || [];
+    const graduatedPlates = new Set((sharedData.rehabGraduations || []).map(g => g.oldPlate));
+    
     const enrolled = programs.filter(p => p.status === 'ENROLLED').length;
+    const graduatedCount = (sharedData.rehabGraduations || []).length;
     
-    const graduatedCount = (sharedData.releasedInmates || []).filter(i => i.status === 'GRADUATED').length;
-    
-    const awaiting = (sharedData.releasedInmates || []).filter(i=>
+    const awaiting = (sharedData.releasedInmates || []).filter(i =>
         (i.status === 'RELEASED' || i.status === 'PAROLED') && 
+        !graduatedPlates.has(i.plate) &&
         !programs.find(p => p.plate === i.plate)
     ).length;
     
@@ -273,106 +315,59 @@ function renderDashboard(){
         return;
     }
     
-    programs.forEach((inmate, idx) => {
-        const pct = Math.min(100, Math.round((inmate.progress / inmate.programDays) * 100));
-        const isReady = inmate.progress >= inmate.programDays;
+    programs.forEach(inmate => {
+        const safeProgramDays = parseInt(inmate.programDays) || 15;
+        const safeProgress = parseInt(inmate.progress) || 0;
+        
+        const pct = Math.min(100, Math.round((safeProgress / safeProgramDays) * 100));
+        const isReady = safeProgress >= safeProgramDays;
         
         const item = document.createElement('div');
         item.className = 'rehab-item ' + (isReady ? 'ready' : 'in-progress');
-        
-        const wrapper = document.createElement('div');
-        wrapper.style.cssText = 'display:flex;justify-content:space-between;align-items:flex-start;gap:15px;';
-        
-        const info = document.createElement('div');
-        info.style.flex = '1';
-        
-        const plateTag = document.createElement('div');
-        plateTag.className = 'plate-tag';
-        plateTag.textContent = inmate.plate; // Safe from XSS
-        
-        const meta1 = document.createElement('div');
-        meta1.className = 'meta-tag';
-        meta1.textContent = `Real: ${inmate.realPlate || 'N/A'} | ID: ${inmate.id || 'MISSING'}`;
-        
-        const meta2 = document.createElement('div');
-        meta2.className = 'meta-tag';
-        meta2.textContent = `Offense: ${inmate.offense || 'UNKNOWN'} | Program: ${inmate.programDays} days`;
-        
-        const meta3 = document.createElement('div');
-        meta3.className = 'meta-tag';
-        meta3.style.color = isReady ? 'var(--success)' : 'var(--warning)';
-        meta3.textContent = isReady ? '✔ PROGRAM COMPLETE — READY FOR GRADUATION' : `Progress: ${inmate.progress}/${inmate.programDays} days (${pct}%)`;
-        
-        const bar = document.createElement('div');
-        bar.className = 'progress-bar';
-        const fill = document.createElement('div');
-        fill.className = 'progress-fill';
-        fill.style.width = pct + '%';
-        fill.style.background = isReady ? 'var(--success)' : 'var(--warning)';
-        bar.appendChild(fill);
-        
-        info.appendChild(plateTag);
-        info.appendChild(meta1);
-        info.appendChild(meta2);
-        info.appendChild(meta3);
-        info.appendChild(bar);
-        wrapper.appendChild(info);
-        
-        if(isReady) {
-            const btn = document.createElement('button');
-            btn.className = 'mech-btn btn-graduate';
-            btn.textContent = 'GRADUATE';
-            btn.onclick = () => graduateInmate(idx);
-            wrapper.appendChild(btn);
-        }
-        
-        item.appendChild(wrapper);
+        item.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:15px;">
+            <div style="flex:1;">
+                <div class="plate-tag">${inmate.plate}</div>
+                <div class="meta-tag">Real: ${inmate.realPlate || 'N/A'} | ID: ${inmate.id || 'MISSING'}</div>
+                <div class="meta-tag">Offense: ${inmate.offense || 'UNKNOWN'} | Program: ${safeProgramDays} days</div>
+                <div class="meta-tag" style="color:${isReady ? 'var(--success)' : 'var(--warning)'}">
+                    ${isReady ? '✔ PROGRAM COMPLETE — READY FOR GRADUATION' : `Progress: ${safeProgress}/${safeProgramDays} days (${pct}%)`}
+                </div>
+                <div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${isReady ? 'var(--success)' : 'var(--warning)'}"></div></div>
+            </div>
+            ${isReady ? `<button class="mech-btn btn-graduate" onclick="graduateInmate('${inmate.plate}')">GRADUATE</button>` : ''}
+        </div>`;
         list.appendChild(item);
     });
     
-    const graduatedList = (sharedData.releasedInmates || []).filter(i => i.status === 'GRADUATED').slice(-5).reverse();
-    graduatedList.forEach(inmate => {
+    const graduatedList = (sharedData.rehabGraduations || []).slice(-5).reverse();
+    graduatedList.forEach(record => {
         const item = document.createElement('div');
         item.className = 'graduated-item';
-        
-        const wrapper = document.createElement('div');
-        wrapper.style.cssText = 'display:flex;justify-content:space-between;align-items:center;';
-        
-        const info = document.createElement('div');
-        
-        const plateTag = document.createElement('div');
-        plateTag.className = 'plate-tag';
-        plateTag.style.color = '#555';
-        plateTag.textContent = inmate.plate; // Safe from XSS
-        
-        const arrow = document.createElement('span');
-        arrow.style.cssText = 'font-size:.7rem;color:var(--success);';
-        arrow.textContent = ' → ' + (inmate.graduatedPlate || 'N/A');
-        plateTag.appendChild(arrow);
-        
-        const meta = document.createElement('div');
-        meta.className = 'meta-tag';
-        meta.textContent = `New ID: ${inmate.graduatedId || 'N/A'} | Graduated: ${inmate.dateGraduated || 'N/A'}`;
-        
-        info.appendChild(plateTag);
-        info.appendChild(meta);
-        
-        const badge = document.createElement('span');
-        badge.className = 'graduated-badge';
-        badge.textContent = 'REHABILITATED';
-        
-        wrapper.appendChild(info);
-        wrapper.appendChild(badge);
-        item.appendChild(wrapper);
+        item.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div>
+                <div class="plate-tag" style="color:#555;">${record.oldPlate} <span style="font-size:.8rem;color:var(--success);">→ ${record.newPlate}</span></div>
+                <div class="meta-tag" style="color:#888;">New Clean ID: ${record.newId} | Graduated: ${record.dateGraduated || 'N/A'}</div>
+            </div>
+            <span class="graduated-badge">REHABILITATED</span>
+        </div>`;
         list.appendChild(item);
     });
 }
 
-setInterval(()=>{
+// Timer loop strictly enforcing integers
+setInterval(() => {
     let needsSave = false;
     (sharedData.rehabPrograms || []).forEach(p => {
-        if(p.status === 'ENROLLED' && p.progress < p.programDays){
-            p.progress++;
+        let prog = parseInt(p.progress);
+        let days = parseInt(p.programDays);
+        
+        if (isNaN(prog)) prog = 0;
+        if (isNaN(days)) days = 15;
+        
+        if(p.status === 'ENROLLED' && prog < days){
+            p.progress = prog + 1;
             needsSave = true;
         }
     });
@@ -382,8 +377,11 @@ setInterval(()=>{
     }
 }, 1000);
 
+setInterval(() => {
+    syncData();
+}, 2000);
+
 loadData();
-setInterval(loadData, 2000);
 </script>
 </body>
 </html>
