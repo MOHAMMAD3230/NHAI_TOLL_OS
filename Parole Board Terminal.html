@@ -2,92 +2,91 @@
 <html lang="en">
 <head>
   <link rel="icon" href="https://mohammad3230.github.io/PROJECT/favicon.png" type="image/png" sizes="32x32" />
-  <script async src="https://www.googletagmanager.com/gtag/js?id=GT-NC6T5LRJ"></script>
-  <script>
-    window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
-    gtag('js', new Date());
-    gtag('config', 'GT-NC6T5LRJ');
-  </script>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NHAI - Parole Board Terminal</title>
-  <style>
-    :root{--bg:#080510;--panel:#10101a;--accent:#00d9ff;--success:#2ed573;--danger:#ff0044;--warning:#ffa502;--border:#2a1a2a;}
-    body{background:var(--bg);color:#ccc;font-family:'Courier New',monospace;margin:0;height:100vh;display:flex;flex-direction:column;overflow:hidden;}
-    .top-bar{background:#000;padding:15px 20px;border-bottom:2px solid var(--warning);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;}
-    .top-bar h1{margin:0;font-size:.9rem;color:var(--warning);letter-spacing:1px;animation: flicker 4s infinite;}
-    .top-bar .time{color:var(--accent);font-size:.8rem;}
-    .main-layout{display:grid;grid-template-columns:1fr 1fr;gap:20px;padding:20px;flex-grow:1;min-height:0;overflow:hidden;}
-    .panel{background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:20px;display:flex;flex-direction:column;overflow:hidden;}
-    .panel-title{color:var(--warning);font-size:.85rem;text-transform:uppercase;letter-spacing:1px;margin-bottom:15px;border-bottom:1px solid var(--border);padding-bottom:10px;flex-shrink:0;}
-    .stat-row{display:flex;gap:12px;margin-bottom:20px;flex-shrink:0;}
-    .stat-box{flex:1;background:#000;border:1px solid var(--border);padding:15px;border-radius:4px;text-align:center;border-top:3px solid var(--warning);transition: transform .1s;}
-    .stat-box:hover{transform: translateY(-2px);}
-    .stat-num{font-size:2rem;font-weight:900;margin-bottom:5px;}
-    .stat-label{font-size:.7rem;color:#888;text-transform:uppercase;}
-    .parole-list{flex-grow:1;overflow-y:auto;padding-right:5px;min-height:0;}
-    .parole-item{background:#000;border:1px solid var(--border);padding:15px;margin-bottom:10px;border-left:4px solid var(--warning);border-radius:4px;transition: border-color .2s;}
-    .parole-item:hover{border-left-color: var(--accent);}
-    .plate-tag{color:var(--warning);font-weight:bold;font-size:1.1rem;}
-    .meta-tag{color:#555;font-size:.75rem;margin-top:4px;}
-    .mech-btn{padding:10px 15px;border:2px solid #000;cursor:pointer;font-weight:bold;text-transform:uppercase;font-size:.7rem;box-shadow:0 3px 0 #000;transition:all .1s;font-family:monospace;border-radius:4px;flex-shrink:0;}
-    .mech-btn:hover{filter: brightness(1.2);}
-    .mech-btn:active{transform:translateY(2px);box-shadow:0 1px 0 #000;}
-    .mech-btn:disabled{opacity:.3;cursor:not-allowed;filter: none;}
-    .btn-approve{background:var(--success);color:#000;}
-    .btn-deny{background:var(--danger);color:#fff;}
-    .log-box{flex:1;background:#000;border:1px solid #222;padding:10px;font-size:.7rem;color:var(--warning);overflow-y:auto;border-radius:4px;min-height:0;}
-    .parole-list::-webkit-scrollbar,.log-box::-webkit-scrollbar{width:6px;}
-    .parole-list::-webkit-scrollbar-track,.log-box::-webkit-scrollbar-track{background:#000;border:1px solid var(--border);}
-    .parole-list::-webkit-scrollbar-thumb,.log-box::-webkit-scrollbar-thumb{background:var(--warning);}
+<script async src="https://www.googletagmanager.com/gtag/js?id=GT-NC6T5LRJ"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'GT-NC6T5LRJ');
+</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NHAI - Parole Board Terminal</title>
+<style>
+:root{--bg:#080510;--panel:#10101a;--accent:#00d9ff;--success:#2ed573;--danger:#ff0044;--warning:#ffa502;--border:#2a1a2a;}
+body{background:var(--bg);color:#ccc;font-family:'Courier New',monospace;margin:0;height:100vh;display:flex;flex-direction:column;overflow:hidden;}
+.top-bar{background:#000;padding:15px 20px;border-bottom:2px solid var(--warning);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;}
+.top-bar h1{margin:0;font-size:.9rem;color:var(--warning);letter-spacing:1px;animation: flicker 4s infinite;}
+.top-bar .time{color:var(--accent);font-size:.8rem;}
+.main-layout{display:grid;grid-template-columns:1fr 1fr;gap:20px;padding:20px;flex-grow:1;min-height:0;overflow:hidden;}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:20px;display:flex;flex-direction:column;overflow:hidden;}
+.panel-title{color:var(--warning);font-size:.85rem;text-transform:uppercase;letter-spacing:1px;margin-bottom:15px;border-bottom:1px solid var(--border);padding-bottom:10px;flex-shrink:0;}
+.stat-row{display:flex;gap:12px;margin-bottom:20px;flex-shrink:0;}
+.stat-box{flex:1;background:#000;border:1px solid var(--border);padding:15px;border-radius:4px;text-align:center;border-top:3px solid var(--warning);transition: transform .1s;}
+.stat-box:hover{transform: translateY(-2px);}
+.stat-num{font-size:2rem;font-weight:900;margin-bottom:5px;}
+.stat-label{font-size:.7rem;color:#888;text-transform:uppercase;}
+.parole-list{flex-grow:1;overflow-y:auto;padding-right:5px;min-height:0;}
+.parole-item{background:#000;border:1px solid var(--border);padding:15px;margin-bottom:10px;border-left:4px solid var(--warning);border-radius:4px;transition: border-color .2s;}
+.parole-item:hover{border-left-color: var(--accent);}
+.plate-tag{color:var(--warning);font-weight:bold;font-size:1.1rem;}
+.meta-tag{color:#555;font-size:.75rem;margin-top:4px;}
+.mech-btn{padding:10px 15px;border:2px solid #000;cursor:pointer;font-weight:bold;text-transform:uppercase;font-size:.7rem;box-shadow:0 3px 0 #000;transition:all .1s;font-family:monospace;border-radius:4px;flex-shrink:0;}
+.mech-btn:hover{filter: brightness(1.2);}
+.mech-btn:active{transform:translateY(2px);box-shadow:0 1px 0 #000;}
+.mech-btn:disabled{opacity:.3;cursor:not-allowed;filter: none;}
+.btn-approve{background:var(--success);color:#000;}
+.btn-deny{background:var(--danger);color:#fff;}
+.log-box{flex:1;background:#000;border:1px solid #222;padding:10px;font-size:.7rem;color:var(--warning);overflow-y:auto;border-radius:4px;min-height:0;}
+.parole-list::-webkit-scrollbar,.log-box::-webkit-scrollbar{width:6px;}
+.parole-list::-webkit-scrollbar-track,.log-box::-webkit-scrollbar-track{background:#000;border:1px solid var(--border);}
+.parole-list::-webkit-scrollbar-thumb,.log-box::-webkit-scrollbar-thumb{background:var(--warning);}
 
-    @keyframes flicker {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.95; }
-      52% { opacity: 1; }
-    }
+@keyframes flicker {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.95; }
+  52% { opacity: 1; }
+}
 
-    @media(max-width:1024px){.main-layout{grid-template-columns:1fr;overflow-y:auto;}}
-    @media(max-width:600px){.top-bar h1{font-size:.7rem;}.parole-item{padding:10px;}.mech-btn{font-size:.6rem;padding:8px 10px;}}
-  </style>
+@media(max-width:1024px){.main-layout{grid-template-columns:1fr;overflow-y:auto;}}
+@media(max-width:600px){.top-bar h1{font-size:.7rem;}.parole-item{padding:10px;}.mech-btn{font-size:.6rem;padding:8px 10px;}}
+</style>
 </head>
 <body>
-  <div class="top-bar">
-      <h1>▸ NHAI_PAROLE // BOARD_TERMINAL_v13.0</h1>
-      <div class="time" id="clock">00:00:00</div>
-  </div>
-  <div class="main-layout">
-      <div class="panel">
-          <div class="panel-title">■ Parole Eligible Inmates</div>
-          <div class="stat-row">
-              <div class="stat-box"><div class="stat-num" style="color:var(--success)" id="stat-eligible">0</div><div class="stat-label">Eligible</div></div>
-              <div class="stat-box"><div class="stat-num" style="color:var(--accent)" id="stat-rehabilitated">0</div><div class="stat-label">Rehabilitated</div></div>
-              <div class="stat-box"><div class="stat-num" style="color:var(--danger)" id="stat-denied">0</div><div class="stat-label">Denied</div></div>
-          </div>
-          <div class="parole-list" id="parole-list"><div style="color:#555;text-align:center;padding:40px;">NO INMATES ELIGIBLE</div></div>
-      </div>
-      <div class="panel">
-          <div class="panel-title">■ Parole Board Log</div>
-          <div class="log-box" id="parole-log"></div>
-      </div>
-  </div>
+<div class="top-bar">
+    <h1>▸ NHAI_PAROLE // BOARD_TERMINAL_v13.0</h1>
+    <div class="time" id="clock">00:00:00</div>
+</div>
+<div class="main-layout">
+    <div class="panel">
+        <div class="panel-title">■ Parole Eligible Inmates</div>
+        <div class="stat-row">
+            <div class="stat-box"><div class="stat-num" style="color:var(--success)" id="stat-eligible">0</div><div class="stat-label">Eligible</div></div>
+            <div class="stat-box"><div class="stat-num" style="color:var(--accent)" id="stat-rehabilitated">0</div><div class="stat-label">Rehabilitated</div></div>
+            <div class="stat-box"><div class="stat-num" style="color:var(--danger)" id="stat-denied">0</div><div class="stat-label">Denied</div></div>
+        </div>
+        <div class="parole-list" id="parole-list"><div style="color:#555;text-align:center;padding:40px;">NO INMATES ELIGIBLE</div></div>
+    </div>
+    <div class="panel">
+        <div class="panel-title">■ Parole Board Log</div>
+        <div class="log-box" id="parole-log"></div>
+    </div>
+</div>
 
 <script>
-const LS_MASTER_KEY = 'enforcementTerminalV23_D1'; 
+const LS_MASTER_KEY = 'enforcementTerminalV23_D1'; // Universal Sync Key
 
 let sharedData = { 
     revenue: 0, valids: 0, missed: 0, level: 1, rankPoints: 0, 
     history: [], registry: {}, forgedAliases: {}, nextSpawnOverride: null,
     activeInmates: [], releasedInmates: [], inbox: [], sentMail: [], call911Logs: [],
     ledgerCashouts: [], intelFlags: [], paroleRecords: [], iaViolations: [], rehabPrograms: [],
-    lastUpdate: 0
+    rehabGraduations: []
 };
 
 function updateClock(){document.getElementById('clock').innerText=new Date().toLocaleTimeString('en-GB');}
 setInterval(updateClock,1000);
 
-// Deep merge utility
 function deepMerge(target, source) {
     for (const key in source) {
         if (source[key] instanceof Array) {
@@ -101,79 +100,51 @@ function deepMerge(target, source) {
     return target;
 }
 
-// Fallback structure generator
-function applyFallbacks(data) {
-    const defaults = {
-        activeInmates: [], releasedInmates: [], registry: {}, forgedAliases: {},
-        nextSpawnOverride: null, inbox: [], sentMail: [], call911Logs: [],
-        ledgerCashouts: [], intelFlags: [], paroleRecords: [], iaViolations: [],
-        rehabPrograms: [], history: [], lastUpdate: 0
-    };
-    for (const key in defaults) {
-        if (data[key] === undefined) data[key] = defaults[key];
-    }
-    return data;
-}
-
 function loadData(){
     const savedStr = localStorage.getItem(LS_MASTER_KEY);
     if(savedStr){
         try{
             const p = JSON.parse(savedStr);
-            applyFallbacks(p);
             deepMerge(sharedData, p); 
+            
+            if(!sharedData.activeInmates)sharedData.activeInmates=[];
+            if(!sharedData.releasedInmates)sharedData.releasedInmates=[];
+            if(!sharedData.registry)sharedData.registry={};
+            if(!sharedData.forgedAliases)sharedData.forgedAliases={};
+            if(sharedData.nextSpawnOverride===undefined)sharedData.nextSpawnOverride=null;
+            if(!sharedData.inbox)sharedData.inbox=[];
+            if(!sharedData.sentMail)sharedData.sentMail=[];
+            if(!sharedData.call911Logs)sharedData.call911Logs=[];
+            if(!sharedData.ledgerCashouts)sharedData.ledgerCashouts=[];
+            if(!sharedData.intelFlags)sharedData.intelFlags=[];
+            if(!sharedData.paroleRecords)sharedData.paroleRecords=[];
+            if(!sharedData.iaViolations)sharedData.iaViolations=[];
+            if(!sharedData.rehabPrograms)sharedData.rehabPrograms=[];
+            if(!sharedData.rehabGraduations)sharedData.rehabGraduations=[];
+            if(!sharedData.history)sharedData.history=[];
         }catch(e){
             console.error("Load error:", e);
         }
     }
-    applyFallbacks(sharedData);
-}
-
-// Prevents race conditions between tabs
-function mergeNewData(){
-    const savedStr = localStorage.getItem(LS_MASTER_KEY);
-    if(!savedStr) return;
-    try {
-        const p = JSON.parse(savedStr);
-        applyFallbacks(p);
-        
-        // Only overwrite memory if the other tab saved data more recently than this tab
-        if (p.lastUpdate > sharedData.lastUpdate) {
-            // Smart merge arrays so we don't lose actions taken in this exact millisecond
-            const arrayKeys = ['history', 'activeInmates', 'releasedInmates', 'inbox', 'sentMail', 'call911Logs', 'ledgerCashouts', 'intelFlags', 'paroleRecords', 'iaViolations', 'rehabPrograms'];
-            arrayKeys.forEach(key => {
-                if(p[key] && sharedData[key]) {
-                    p[key] = p[key].concat(sharedData[key].filter(item => !p[key].includes(item)));
-                }
-            });
-            
-            deepMerge(sharedData, p);
-            applyFallbacks(sharedData);
-            renderDashboard();
-            renderLogs();
-        }
-    } catch(e) {
-        console.error("Sync merge error:", e);
-    }
+    renderDashboard();
 }
 
 function saveData(){
-    sharedData.lastUpdate = Date.now(); // Timestamp to prevent sync race conditions
     localStorage.setItem(LS_MASTER_KEY, JSON.stringify(sharedData));
 }
 
 function addLog(msg, color, saveToState=true){
-    const l = document.getElementById('parole-log');
-    const e = document.createElement('div');
-    e.style.color = color || 'var(--warning)';
-    e.style.marginBottom = '5px';
-    e.innerText = '> ' + msg;
+    const l=document.getElementById('parole-log');
+    const e=document.createElement('div');
+    e.style.color=color||'var(--warning)';
+    e.style.marginBottom='5px';
+    e.innerText='> '+msg;
     l.prepend(e);
 
-    // Prevent memory bloat in DOM
-    while(l.children.length > 50) l.removeChild(l.lastChild);
+    if(l.children.length > 50) l.removeChild(l.lastChild);
 
     if(saveToState) {
+        if(!sharedData.iaViolations) sharedData.iaViolations = [];
         sharedData.iaViolations.push({
             plate: "PAROLE_BOARD",
             type: "LOG",
@@ -182,33 +153,30 @@ function addLog(msg, color, saveToState=true){
             time: new Date().toLocaleTimeString(),
             status: "LOGGED"
         });
-        // Cap logs in storage to prevent exceeding localStorage limits
-        if(sharedData.iaViolations.length > 100) sharedData.iaViolations.splice(0, sharedData.iaViolations.length - 100);
-        
         saveData();
     }
 }
 
 function renderLogs(){
-    const l = document.getElementById('parole-log');
+    const l=document.getElementById('parole-log');
     l.innerHTML = '';
-    const logs = sharedData.iaViolations.filter(f => f.plate === 'PAROLE_BOARD' && f.type === 'LOG').slice(-30).reverse();
+    const logs = (sharedData.iaViolations||[]).filter(f => f.plate === 'PAROLE_BOARD' && f.type === 'LOG').slice(-30).reverse();
     if(logs.length === 0){
         l.innerHTML = '<div style="color:#555;">No board logs recorded yet.</div>';
     } else {
         logs.forEach(log => {
-            const e = document.createElement('div');
-            e.style.color = log.color || 'var(--warning)';
-            e.style.marginBottom = '5px';
-            e.innerText = '> ' + log.message;
+            const e=document.createElement('div');
+            e.style.color=log.color||'var(--warning)';
+            e.style.marginBottom='5px';
+            e.innerText='> '+log.message;
             l.appendChild(e);
         });
     }
 }
 
 function grantParole(plate){
-    // Removed loadData() here to stop race conditions; relying on current memory state
-    const inmates = sharedData.activeInmates;
+    loadData(); 
+    const inmates=sharedData.activeInmates;
     const index = inmates.findIndex(i => i.plate === plate);
     
     if(index === -1) return;
@@ -238,10 +206,12 @@ function grantParole(plate){
         dateReleased: new Date().toLocaleDateString()
     });
     
+    if(!sharedData.paroleRecords) sharedData.paroleRecords=[];
     sharedData.paroleRecords.push({plate: realPlate, decision:'GRANTED', date: new Date().toLocaleString()});
+    
+    if(!sharedData.rehabPrograms) sharedData.rehabPrograms=[];
     sharedData.rehabPrograms.push({plate: realPlate, id: newId, program:'PAROLE SUPERVISION', status:'ACTIVE'});
     
-    // Remove from active inmates
     inmates.splice(index, 1);
     
     sharedData.history.push({
@@ -253,12 +223,11 @@ function grantParole(plate){
     
     saveData();
     renderDashboard();
-    renderLogs(); // Ensure logs aren't double printed from interval
-    addLog(`PAROLE GRANTED: ${realPlate} reintegrated into registry as CLEAR.`, 'var(--success)', false);
+    addLog(`PAROLE GRANTED: ${realPlate} reintegrated into registry as CLEAR.`, 'var(--success)');
 }
 
 function denyParole(plate){
-    // Removed loadData() here to stop race conditions; relying on current memory state
+    loadData(); 
     const inmates = sharedData.activeInmates;
     const index = inmates.findIndex(i => i.plate === plate);
     
@@ -269,12 +238,11 @@ function denyParole(plate){
     
     inmate.sentenceRemaining = 30; 
     
-    const realPlate = inmate.realPlate || inmate.plate; // Fixed consistency bug
-    
-    sharedData.paroleRecords.push({plate: realPlate, decision:'DENIED', date: new Date().toLocaleString()});
+    if(!sharedData.paroleRecords) sharedData.paroleRecords=[];
+    sharedData.paroleRecords.push({plate: inmate.plate, decision:'DENIED', date: new Date().toLocaleString()});
     
     sharedData.history.push({
-        plate: realPlate,
+        plate: inmate.plate,
         id: inmate.id||'DENIED',
         action: 'PAROLE DENIED',
         timestamp: new Date().toLocaleTimeString()
@@ -282,14 +250,13 @@ function denyParole(plate){
     
     saveData();
     renderDashboard();
-    renderLogs(); // Ensure logs aren't double printed from interval
-    addLog(`PAROLE DENIED: ${realPlate} sentence extended by 30 days.`, 'var(--danger)', false);
+    addLog(`PAROLE DENIED: ${inmate.plate} sentence extended by 30 days.`, 'var(--danger)');
 }
 
 function renderDashboard(){
     const eligible = sharedData.activeInmates.filter(i => i.sentenceRemaining <= 0);
-    const rehabCount = sharedData.paroleRecords.filter(r => r.decision === 'GRANTED').length;
-    const deniedCount = sharedData.paroleRecords.filter(r => r.decision === 'DENIED').length;
+    const rehabCount = (sharedData.paroleRecords||[]).filter(r => r.decision === 'GRANTED').length;
+    const deniedCount = (sharedData.paroleRecords||[]).filter(r => r.decision === 'DENIED').length;
     
     document.getElementById('stat-eligible').innerText = eligible.length;
     document.getElementById('stat-rehabilitated').innerText = rehabCount;
@@ -306,66 +273,30 @@ function renderDashboard(){
     eligible.forEach(inmate => {
         const item = document.createElement('div');
         item.className = 'parole-item pending';
-        
-        // Security Fix: Construct with DOM elements instead of innerHTML to prevent XSS
-        const wrapper = document.createElement('div');
-        wrapper.style.cssText = 'display:flex;justify-content:space-between;align-items:flex-start;gap:15px;';
-        
-        const info = document.createElement('div');
-        info.style.flex = '1';
-        
-        const plateTag = document.createElement('div');
-        plateTag.className = 'plate-tag';
-        plateTag.textContent = inmate.plate;
-        
-        const meta1 = document.createElement('div');
-        meta1.className = 'meta-tag';
-        meta1.textContent = `Real: ${inmate.realPlate||'N/A'} | ID: ${inmate.id||'MISSING'}`;
-        
-        const meta2 = document.createElement('div');
-        meta2.className = 'meta-tag';
-        meta2.textContent = `Offense: ${inmate.offense} | Facility: ${inmate.facility}`;
-        
-        const meta3 = document.createElement('div');
-        meta3.className = 'meta-tag';
-        meta3.style.color = 'var(--success)';
-        meta3.textContent = '✔ SENTENCE SERVED — ELIGIBLE FOR PAROLE';
-        
-        info.append(plateTag, meta1, meta2, meta3);
-        
-        const btns = document.createElement('div');
-        btns.style.cssText = 'display:flex;flex-direction:column;gap:8px;';
-        
-        const btnApprove = document.createElement('button');
-        btnApprove.className = 'mech-btn btn-approve';
-        btnApprove.textContent = 'GRANT';
-        btnApprove.addEventListener('click', () => grantParole(inmate.plate));
-        
-        const btnDeny = document.createElement('button');
-        btnDeny.className = 'mech-btn btn-deny';
-        btnDeny.textContent = 'DENY';
-        btnDeny.addEventListener('click', () => denyParole(inmate.plate));
-        
-        btns.append(btnApprove, btnDeny);
-        wrapper.append(info, btns);
-        item.appendChild(wrapper);
-        
+        item.innerHTML=`
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:15px;">
+            <div style="flex:1;">
+                <div class="plate-tag">${inmate.plate}</div>
+                <div class="meta-tag">Real: ${inmate.realPlate||'N/A'} | ID: ${inmate.id||'MISSING'}</div>
+                <div class="meta-tag">Offense: ${inmate.offense} | Facility: ${inmate.facility}</div>
+                <div class="meta-tag" style="color:var(--success)">✔ SENTENCE SERVED — ELIGIBLE FOR PAROLE</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+                <button class="mech-btn btn-approve" onclick="grantParole('${inmate.plate}')">GRANT</button>
+                <button class="mech-btn btn-deny" onclick="denyParole('${inmate.plate}')">DENY</button>
+            </div>
+        </div>`;
         list.appendChild(item);
     });
 }
 
-// Initial Load
 loadData();
-renderDashboard();
 renderLogs();
 
-// Sync with other tabs intelligently every 2 seconds
-setInterval(mergeNewData, 2000);
-
-// Sync instantly when another tab saves
-window.addEventListener('storage', (e) => {
-    if (e.key === LS_MASTER_KEY) mergeNewData();
-});
+setInterval(() => {
+    loadData();
+    renderLogs(); 
+}, 2000);
 </script>
 </body>
 </html>
