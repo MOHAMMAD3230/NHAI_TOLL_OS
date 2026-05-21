@@ -11,7 +11,7 @@
 </script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>NHAI - Audit & Revenue Terminal v9.2</title>
+<title>NHAI - Audit & Revenue Terminal v9.3</title>
 <style>
     :root {
         --bg: #0a0508; 
@@ -308,7 +308,7 @@
 <body>
 
 <div class="top-bar">
-    <h1>▸ NHAI_AUDIT // REVENUE_v9.2</h1>
+    <h1>▸ NHAI_AUDIT // REVENUE_v9.3</h1>
     <div class="system-status">
         <div><span class="status-dot online"></span>MAINFRAME</div>
         <div><span class="status-dot online"></span>RESERVE</div>
@@ -345,8 +345,7 @@
                 <div class="stat-num" style="color:var(--danger);" id="stat-bounties">$0</div>
                 <div class="stat-label">Bounty & Fee</div>
             </div>
-            <!-- FIXED: Added missing id="stat-cards" -->
-            <div class="stat-box audit-stat" id="stat-cards-box">
+            <div class="stat-box audit-stat">
                 <div class="stat-num" style="color:var(--accent);" id="stat-cards">$0</div>
                 <div class="stat-label">Registry Rev</div>
             </div>
@@ -431,34 +430,25 @@
 <script>
     const LS_D1_KEY = 'enforcementTerminalV23_D1';
     const LS_D2_KEY = 'enforcementTerminalV23_TOLL';
+    const GAME_MONTH_DURATION = 45 * 60 * 1000; // Must match Officer Terminal (45 mins)
 
     const defaultData = { 
         revenue: 0, valids: 0, missed: 0, level: 1, rankPoints: 0, 
         history: [], registry: {}, forgedAliases: {}, nextSpawnOverride: null,
         activeInmates: [], releasedInmates: [], inbox: [], sentMail: [], call911Logs: [],
         ledgerCashouts: [], intelFlags: [], paroleRecords: [], iaViolations: [], rehabPrograms: [],
-        citizenCards: {}, revenuePool: 0, lifetimeRevenue: 0, officerBalance: 0, payslips: []
+        citizenCards: {}, revenuePool: 0, lifetimeRevenue: 0, officerBalance: 0, payslips: [],
+        monthStartTimestamp: Date.now(), lifestyle: { housing: 'streets', food: 'none', accessories: [], billsDue: {} }
     };
 
     let sharedData = JSON.parse(JSON.stringify(defaultData));
-    let syncIntervalId = null;
-    let isBusy = false; // Prevents sync race conditions during animations/clicks
-
-    // SECURITY: Sanitize string to prevent XSS from modified localStorage
-    function sanitizeHTML(str) {
-        if (typeof str !== 'string') return '';
-        return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    }
 
     function updateClock() { 
-        document.getElementById('clock').textContent = new Date().toLocaleTimeString('en-GB'); 
+        document.getElementById('clock').innerText = new Date().toLocaleTimeString('en-GB'); 
     }
     setInterval(updateClock, 1000);
 
     function loadData() {
-        // Prevent sync overwrite if user is currently depositing cash
-        if (isBusy) return; 
-
         try {
             const d1 = localStorage.getItem(LS_D1_KEY);
             const d2 = localStorage.getItem(LS_D2_KEY);
@@ -467,41 +457,41 @@
 
             let m = JSON.parse(JSON.stringify(defaultData));
 
-            if (d1Data) { 
-                Object.assign(m, d1Data); 
-                if (d1Data.registry) Object.assign(m.registry, d1Data.registry); 
-                if (d1Data.citizenCards) Object.assign(m.citizenCards, d1Data.citizenCards); 
-            }
-            if (d2Data) { 
-                // Force Integer parsing to prevent string concatenation bugs
-                m.revenue = Math.max(parseInt(m.revenue) || 0, parseInt(d2Data.revenue) || 0); 
-                m.valids = Math.max(parseInt(m.valids) || 0, parseInt(d2Data.valids) || 0); 
-                m.missed = Math.max(parseInt(m.missed) || 0, parseInt(d2Data.missed) || 0);
-                m.rankPoints = Math.max(parseInt(m.rankPoints) || 0, parseInt(d2Data.rankPoints) || 0);
-                m.revenuePool = Math.max(parseInt(m.revenuePool) || 0, parseInt(d2Data.revenuePool) || 0);
-                m.lifetimeRevenue = Math.max(parseInt(m.lifetimeRevenue) || 0, parseInt(d2Data.lifetimeRevenue) || 0);
-                m.officerBalance = Math.max(parseInt(m.officerBalance) || 0, parseInt(d2Data.officerBalance) || 0);
-                
-                if (d2Data.registry) Object.assign(m.registry, d2Data.registry); 
-                if (d2Data.citizenCards) Object.assign(m.citizenCards, d2Data.citizenCards); 
-                if (d2Data.history) { 
-                    m.history = d2Data.history.concat(m.history).filter((v, i, a) => 
-                        a.findIndex(t => (t.plate === v.plate && t.timestamp === v.timestamp)) === i
-                    ); 
+            // Safe Merge Function to prevent desyncs
+            const safeMerge = (target, source) => {
+                for (let key in source) {
+                    if (!source.hasOwnProperty(key)) continue;
+                    if (source[key] !== null && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+                        if (!target[key]) target[key] = {};
+                        safeMerge(target[key], source[key]);
+                    } else {
+                        target[key] = source[key];
+                    }
                 }
-                if (d2Data.ledgerCashouts && d2Data.ledgerCashouts.length > m.ledgerCashouts.length) m.ledgerCashouts = d2Data.ledgerCashouts;
-                if (d2Data.iaViolations && d2Data.iaViolations.length > m.iaViolations.length) m.iaViolations = d2Data.iaViolations;
-                if (d2Data.payslips && d2Data.payslips.length > m.payslips.length) m.payslips = d2Data.payslips;
+            };
+
+            if (d1Data) safeMerge(m, d1Data); 
+            if (d2Data) safeMerge(m, d2Data); 
+
+            // Synchronize Game Month Cycle safely
+            if (m.monthStartTimestamp) {
+                const now = Date.now();
+                if (now - m.monthStartTimestamp >= GAME_MONTH_DURATION) {
+                    // Month expired in the background, trigger warnings for this terminal
+                    addAuditLog("SYSTEM: Fiscal Month Expired. Lifestyle subscriptions reverted to default.", "var(--danger)");
+                    m.monthStartTimestamp = now; // Reset month
+                }
+            } else {
+                m.monthStartTimestamp = Date.now();
             }
 
+            // Array length checks (prevent corruption)
             ['history', 'ledgerCashouts', 'iaViolations', 'activeInmates', 'releasedInmates', 'payslips'].forEach(k => {
                 if (!Array.isArray(m[k])) m[k] = [];
             });
 
             sharedData = m;
-        } catch(e) { 
-            console.error("Load error:", e); 
-        }
+        } catch(e) { console.error("Load error:", e); }
         renderDashboard();
     }
 
@@ -509,9 +499,7 @@
         try { 
             localStorage.setItem(LS_D1_KEY, JSON.stringify(sharedData)); 
             localStorage.setItem(LS_D2_KEY, JSON.stringify(sharedData)); 
-        } catch(e) { 
-            console.error("Save error:", e); 
-        }
+        } catch(e) { console.error("Save error:", e); }
     }
 
     function addAuditLog(msg, color) {
@@ -528,11 +516,8 @@
         loadData(); 
         if(sharedData.revenue === 0) return;
         
-        isBusy = true; // Lock sync
         const currentRev = sharedData.revenue;
-        
-        // Fix deprecated substr
-        const authCode = `FED-${Math.random().toString(36).substring(2, 6).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+        const authCode = `FED-${Math.random().toString(36).substr(2, 4).toUpperCase()}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
         
         const overlay = document.getElementById('cashout-overlay');
         const btn = document.querySelector('.btn-cashout');
@@ -549,8 +534,8 @@
             statusText.innerHTML = `DEPOSITING $${currentRev} TO POOL <span class='blinker'>_</span>`; 
             statusText.style.color = "var(--purple)";
             
-            sharedData.revenuePool = (parseInt(sharedData.revenuePool) || 0) + currentRev;
-            sharedData.lifetimeRevenue = (parseInt(sharedData.lifetimeRevenue) || 0) + currentRev;
+            sharedData.revenuePool = (sharedData.revenuePool || 0) + currentRev;
+            sharedData.lifetimeRevenue = (sharedData.lifetimeRevenue || 0) + currentRev;
             
             sharedData.ledgerCashouts.push({
                 date: new Date().toLocaleString(),
@@ -571,7 +556,6 @@
                 overlay.classList.remove('active');
                 btn.disabled = false;
                 btn.style.opacity = '1';
-                isBusy = false; // Unlock sync
                 loadData();
             }, 1500);
         }, 4500);
@@ -610,45 +594,44 @@
     }
 
     function renderDashboard() {
-        document.getElementById('stat-total').textContent = `$${sharedData.revenue || 0}`;
-        document.getElementById('stat-pool').textContent = `$${sharedData.revenuePool || 0}`;
-        document.getElementById('stat-valids').textContent = sharedData.valids || 0;
-        document.getElementById('stat-misses').textContent = sharedData.missed || 0;
+        document.getElementById('stat-total').innerText = `$${sharedData.revenue || 0}`;
+        document.getElementById('stat-pool').innerText = `$${sharedData.revenuePool || 0}`;
+        document.getElementById('stat-valids').innerText = sharedData.valids || 0;
+        document.getElementById('stat-misses').innerText = sharedData.missed || 0;
 
         const breakdown = calculateBreakdown();
         const totalGross = breakdown.tolls + breakdown.arrests + breakdown.rehab + breakdown.cards;
         
-        document.getElementById('stat-tolls').textContent = `$${breakdown.tolls}`;
-        document.getElementById('stat-bounties').textContent = `$${breakdown.arrests + breakdown.rehab}`;
-        document.getElementById('stat-cards').textContent = `$${breakdown.cards}`;
+        document.getElementById('stat-tolls').innerText = `$${breakdown.tolls}`;
+        document.getElementById('stat-bounties').innerText = `$${breakdown.arrests + breakdown.rehab}`;
+        document.getElementById('stat-cards').innerText = `$${breakdown.cards}`;
         
         const missPenalty = (sharedData.missed || 0) * 100;
         const netPnl = totalGross - missPenalty;
-        document.getElementById('stat-pnl').textContent = `$${netPnl}`;
+        document.getElementById('stat-pnl').innerText = `$${netPnl}`;
         document.getElementById('stat-pnl').style.color = netPnl >= 0 ? 'var(--success)' : 'var(--danger)';
         
         const leakRate = totalGross > 0 ? Math.round((missPenalty / totalGross) * 100) : 0;
-        document.getElementById('leak-rate-text').textContent = `LEAK: ${leakRate}%`;
+        document.getElementById('leak-rate-text').innerText = `LEAK: ${leakRate}%`;
 
         const lifetime = sharedData.lifetimeRevenue || 0;
         const infraSpend = Math.floor(lifetime * 0.40);
         const secSpend = Math.floor(lifetime * 0.35);
         const adminSpend = Math.floor(lifetime * 0.25);
         
-        document.getElementById('budget-total-label').textContent = `LIFETIME: $${lifetime}`;
-        document.getElementById('val-infra').textContent = `$${infraSpend.toLocaleString()}`;
+        document.getElementById('budget-total-label').innerText = `LIFETIME: $${lifetime}`;
+        document.getElementById('val-infra').innerText = `$${infraSpend.toLocaleString()}`;
         document.getElementById('bar-infra').style.width = lifetime > 0 ? '40%' : '0%';
-        document.getElementById('val-sec').textContent = `$${secSpend.toLocaleString()}`;
+        document.getElementById('val-sec').innerText = `$${secSpend.toLocaleString()}`;
         document.getElementById('bar-sec').style.width = lifetime > 0 ? '35%' : '0%';
-        document.getElementById('val-admin').textContent = `$${adminSpend.toLocaleString()}`;
+        document.getElementById('val-admin').innerText = `$${adminSpend.toLocaleString()}`;
         document.getElementById('bar-admin').style.width = lifetime > 0 ? '25%' : '0%';
 
         const listContainer = document.getElementById('trans-list');
         listContainer.innerHTML = '';
         const recentHistory = (sharedData.history || []).slice(-20).reverse();
-        document.getElementById('trans-count').textContent = `${(sharedData.history || []).length} Records`;
+        document.getElementById('trans-count').innerText = `${(sharedData.history || []).length} Records`;
         
-        // FIXED: Corrected conditional check to prevent rendering "NO TRANSACTIONS" over valid pool deposits
         if (recentHistory.length === 0 && (sharedData.ledgerCashouts || []).length === 0) {
             listContainer.innerHTML = '<div style="color:#444; text-align:center; padding:20px 0;">NO TRANSACTIONS</div>';
         } else {
@@ -661,8 +644,8 @@
                         <span style="color:var(--success);">$${co.totalCashOut}</span>
                     </div>
                     <div class="item-meta">
-                        <span>AUTH: ${sanitizeHTML(co.authCode || 'N/A')}</span>
-                        <span>${sanitizeHTML(co.date)}</span>
+                        <span>AUTH: ${co.authCode || 'N/A'}</span>
+                        <span>${co.date}</span>
                     </div>
                 `;
                 listContainer.appendChild(item);
@@ -685,12 +668,12 @@
                 item.className = `breakdown-item ${cssClass}`;
                 item.innerHTML = `
                     <div class="item-header">
-                        <span style="color:var(--warning);">${sanitizeHTML(h.plate)}</span>
+                        <span style="color:var(--warning);">${h.plate}</span>
                         <span style="color:${actionColor}; font-weight:bold;">${amountText}</span>
                     </div>
                     <div class="item-meta">
-                        <span>${sanitizeHTML(h.action)}</span>
-                        <span>${sanitizeHTML(h.timestamp || 'N/A')}</span>
+                        <span>${h.action}</span>
+                        <span>${h.timestamp || 'N/A'}</span>
                     </div>
                 `;
                 listContainer.appendChild(item);
@@ -708,7 +691,7 @@
                 entry.className = 'log-entry';
                 entry.style.color = v.color || "var(--success)";
                 const time = v.timestamp || new Date().toLocaleTimeString('en-GB');
-                entry.innerHTML = `<span class="log-time">[${time}]</span>> ${sanitizeHTML(v.message)}`; 
+                entry.innerHTML = `<span class="log-time">[${time}]</span>> ${v.message}`; 
                 auditLog.appendChild(entry);
             });
         }
@@ -718,11 +701,8 @@
         if (event.key === LS_D1_KEY || event.key === LS_D2_KEY) { loadData(); }
     });
 
-    // Initial load
     loadData();
-
-    // Auto-sync (respects isBusy lock)
-    syncIntervalId = setInterval(loadData, 2000);
+    setInterval(loadData, 2000);
 </script>
 </body>
 </html>
